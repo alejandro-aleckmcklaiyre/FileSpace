@@ -44,9 +44,11 @@ class Repository:
                 ids[index], ids[target] = ids[target], ids[index]
                 db.executemany("UPDATE quick_sort_shortcuts SET position=? WHERE id=?", enumerate(ids))
 
-    def start_operation(self, destination: str, sources: list[str]) -> tuple[int, list[int]]:
+    def start_operation(self, destination: str, sources: list[str], operation_type: str = "move") -> tuple[int, list[int]]:
+        if operation_type not in {"copy", "move"}:
+            raise ValueError("Unknown transfer operation.")
         with connect(self.path) as db:
-            operation = db.execute("INSERT INTO operation_history(destination_path,status) VALUES(?,'running')", (destination,)).lastrowid
+            operation = db.execute("INSERT INTO operation_history(destination_path,operation_type,status) VALUES(?,?,'running')", (destination, operation_type)).lastrowid
             items = []
             for source in sources:
                 items.append(db.execute(
@@ -66,5 +68,5 @@ class Repository:
     def history(self) -> list[dict]:
         with connect(self.path) as db:
             return [dict(row) for row in db.execute(
-                "SELECT i.*,h.created_at AS operation_date,h.status AS operation_status FROM operation_items i JOIN operation_history h ON h.id=i.operation_id ORDER BY i.id DESC LIMIT 1000"
+                "SELECT i.*,h.operation_type,h.created_at AS operation_date,h.status AS operation_status FROM operation_items i JOIN operation_history h ON h.id=i.operation_id ORDER BY i.id DESC LIMIT 1000"
             )]

@@ -1,10 +1,10 @@
-"""Coordinate persistent shortcuts and confirmed, journaled moves."""
+"""Coordinate shortcuts and shared, confirmed copy/move transfers."""
 
 from pathlib import Path
 from threading import Event
 
 from app.database.repository import Repository
-from app.filesystem.file_operations import MovePlan, build_plan, execute_plan
+from app.filesystem.file_operations import TransferPlan, build_plan, execute_plan
 from app.filesystem.path_validator import validate_directory
 from app.filesystem.safety import SafetyPolicy
 
@@ -18,11 +18,11 @@ class QuickSortService:
         validate_directory(str(folder))
         self.repository.save_shortcut(keyword, name, str(folder), shortcut_id)
 
-    def plan(self, sources: list[str], destination: str) -> MovePlan:
-        return build_plan(sources, destination, self.policy)
+    def plan(self, sources: list[str], destination: str, operation: str = "move") -> TransferPlan:
+        return build_plan(sources, destination, self.policy, operation)
 
-    def move(self, plan: MovePlan, decisions: list[str], cancel: Event, progress) -> list:
-        operation, ids = self.repository.start_operation(str(plan.destination), [str(item.source) for item in plan.items])
+    def transfer(self, plan: TransferPlan, decisions: list[str], cancel: Event, progress) -> list:
+        operation, ids = self.repository.start_operation(str(plan.destination), [str(item.source) for item in plan.items], plan.operation)
 
         def record(index, result):
             try:
@@ -36,7 +36,7 @@ class QuickSortService:
         try:
             results = execute_plan(plan, decisions, self.policy, cancel, record, progress)
             statuses = {item.status for item in results}
-            status = "completed" if statuses <= {"moved", "skipped"} else "cancelled" if statuses == {"cancelled"} else "partial"
+            status = "completed" if statuses <= {"moved", "copied", "skipped"} else "cancelled" if statuses == {"cancelled"} else "partial"
             try:
                 self.repository.finish_operation(operation, status)
             except Exception as error:

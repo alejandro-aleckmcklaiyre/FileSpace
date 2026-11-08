@@ -5,7 +5,7 @@ See [the PRD](docs/PRD.md) for the product requirements and milestones.
 
 ## Current scope
 
-Milestone 5 adds persistent Quick Sort destinations and confirmed file moves to **FileSpace**, initially
+Milestone 6 adds internal and external file drag-and-drop, with confirmed copy/move transfers, to **FileSpace**, initially
 1200 × 800 logical pixels, with a navigation bar, scrollable sidebar,
 file details view, and preview panel. Drag the dividers to resize panels.
 Select a sidebar folder or drive to browse it. The Preview button hides
@@ -19,19 +19,47 @@ redirected folders. Hidden/system entries follow Qt's default visibility.
 
 The listing displays name, type, size, and modification date. It reads directory
 metadata. Selecting a file reads its preview without modifying it. The browsing
-model remains read-only; only confirmed Quick Sort operations transfer files.
-Search, drag-and-drop, general file commands, and undo remain future work.
+model remains read-only; confirmed Quick Sort clicks and accepted file drops
+use a separate transfer service. Search, general file commands, and undo remain future work.
 Invalid or inaccessible destinations show a warning and preserve the last valid
 location and history. If a drive disconnects after loading, Refresh or navigating
 back to it checks access again; continuous drive-disconnection notifications are
 not implemented. Directory validation uses a worker and Qt loads listings
 asynchronously. OS/network requests can still take time to finish.
 
+## Drag-and-drop
+
+- Inside FileSpace, drag one or multiple selected files onto a folder row or a
+  Quick Sort destination. Default: **Move**. Hold **Ctrl** when dropping to **Copy**.
+- From Windows File Explorer, drop local files onto a folder row, an existing
+  Quick Sort destination, or empty space in the file list (the current folder).
+  The import dialog defaults to **Copy**, including for Quick Sort targets.
+  Choose **Move** explicitly if wanted, then review the confirmation.
+- Every drop still requires confirmation showing copy/move intent, selected
+  files, sources, destination, total bytes (including named streams), and conflicts.
+  Skip/Rename/explicit Replace, progress, cancellation between files, preview
+  release, and per-file history use the same verified engine as Quick Sort clicks.
+- Blue highlighting indicates a candidate target; red highlighting/no-drop cursor
+  indicates an invalid target. Filesystem access, protected aliases, and availability
+  are fully checked in the background after dropping, before confirmation.
+- Dropping onto a file row, a blank shortcut area, a protected path, or the same
+  source folder is rejected. Directory transfers, web/text/virtual-file drops,
+  and dragging files out of FileSpace are not supported. Mixed file/folder input
+  is rejected before any transfer. Busy transfer views do not accept new drops.
+
+Windows receives a Copy acknowledgement for incoming drops so Explorer cannot
+remove an original while a confirmation or worker is pending. FileSpace performs
+an explicitly chosen external Move itself after verification. Sources that offer
+only a native Move action are rejected; use a normal Explorer drag and choose
+Move in the import dialog. Internal drags use a private in-process MIME payload
+and cannot trigger an unconfirmed shell transfer outside FileSpace.
+
 ## Quick Sort
 
 1. Under Quick Sort in the sidebar (scroll down if necessary), choose **Add**.
    Enter a unique keyword, name, and an existing destination folder. Keywords are
-   labels for now; there are no keyboard hooks. Optional colors/icons are not exposed yet.
+   labels, with keyboard activation for single A–Z letters while the file list
+   has focus. Optional colors/icons are not exposed yet.
    The selection hint explains whether clicking will open the destination or review a move.
 2. Click a shortcut with no files selected to browse its destination. **Open**
    opens the highlighted destination even if files are selected.
@@ -47,19 +75,31 @@ asynchronously. OS/network requests can still take time to finish.
    UTC timestamps, and the database location. Edit/Delete/↑/↓ manage highlighted
    shortcuts. Deleting a shortcut never deletes the destination or its files.
 
+Keyboard enhancement (explicitly approved ahead of the PRD's original schedule):
+focus the file list and press a configured single-letter keyword such as **F**.
+It runs the same action as clicking the shortcut: review a confirmed move for
+selected files, or navigate when nothing is selected. Matching is case-insensitive;
+Shift+letter also works. Unassigned letters retain filename navigation. Multi-letter
+keywords remain mouse-only labels. Ctrl/Alt commands, address/search entry, and
+dialogs are unaffected. Held-key repeats and activations during a busy transfer
+are ignored. No global keyboard hooks or system-wide bindings are installed.
+
 Shortcuts and operation history live in `filespace.sqlite3` under Qt's
 `AppLocalDataLocation` (normally `%LOCALAPPDATA%\FileSpace`), outside the repository.
 No user-file content is stored in SQLite. Schema version 1 uses separate batch
 and per-file tables. Connections are short-lived and local to their calling thread.
+History distinguishes `copy` and `move`, including records created before
+Milestone 6; no schema migration is required for the new operation type.
 A database error prevents starting new transfers; a journaling failure during a
 batch stops subsequent files and asks you to inspect the source/destination.
 
 ### Transfer safety and current limits
 
-All moves, including same-drive moves, copy to a unique destination-side staging
+All copies and moves, including same-drive moves, copy to a unique destination-side staging
 file, flush it, verify SHA-256 content against the original, then publish without
 overwriting an unexpected file. The published copy and unchanged source are
-checked again before source removal. Named NTFS data streams, including the
+checked again before reporting success. Copy retains the original; Move removes
+it only after successful verification. Named NTFS data streams, including the
 `Zone.Identifier` attached to many downloaded files, are copied and SHA-256
 verified too; the confirmation total includes their byte sizes. If the destination
 cannot preserve a stream, the move fails and retains the original and its metadata.
@@ -204,6 +244,35 @@ removable-drive disconnection, and Windows ACL behavior require manual verificat
 Start manual Quick Sort checks with disposable ordinary files and folders outside
 the protected locations; verify shortcuts/history persist after restarting.
 
+Drag-and-drop checks send Qt viewport events and test internal source detection,
+Ctrl-copy, external Copy acknowledgement, folder/blank-space/shortcut targeting,
+invalid targets/payloads, disabled views, deferred confirmation, and preserved
+originals. End-to-end worker tests cover external Copy/explicit Move, internal
+copy/move, import/confirmation cancellation, and history. Copy tests also cover
+conflicts, verification failure, cancellation, and named-stream preservation.
+
+Manual Milestone 6 verification (use disposable files):
+
+1. Drag files within FileSpace onto a folder; confirm Move and check both locations.
+2. Repeat holding Ctrl at drop time; confirm Copy and verify originals remain.
+3. Drag files onto a Quick Sort destination; test both internal modes.
+4. Drag from Windows File Explorer onto the current folder's blank area, a folder
+   row, and a Quick Sort destination. Confirm Copy is initially selected; test
+   explicit Move separately. Check Windows Explorer's source after each operation.
+5. Cancel at each confirmation stage and check that nothing transferred. Check
+   file-row/protected/same-folder drops, conflicts, and cancellation between files.
+6. Test a cross-drive transfer and a file containing download-zone metadata.
+
+Synthetic Qt events do not validate native Explorer/OLE interoperation. Physical
+mouse drags from Windows Explorer and cross-volume hardware behavior still need
+the manual checks above. Folder transfers remain outside the current scope.
+
+Bulk-selection regression checks repeat transfers in the same window, including
+Ctrl-click and Shift-click image batches after the listing refreshes. Selection
+snapshots include every distinct file with selected cells, not just rows whose
+every column is selected, so partially selected rows are not omitted from
+confirmation or internal drags.
+
 If imports fail, check that VS Code and the terminal use the same environment.
 Download failures can indicate a network/proxy restriction. Qt DLL errors
 require checking Python architecture, installation completeness, and conflicting
@@ -232,10 +301,12 @@ FileSpace.
 - `app/database/`: SQLite connections, versioned schema, and repository operations.
 - `app/ui/quick_sort_panel.py`: shortcut management and the confirmed move workflow.
 - `app/ui/dialogs/quick_sort.py`: shortcut configuration and move/conflict confirmation.
+- `app/ui/drag_drop.py`: private internal drag payloads, URL import, and drop feedback/routing.
 - `tests/test_browsing.py`: disposable-folder browsing regression checks.
 - `tests/test_previews.py`: generated-fixture preview and optional video checks.
 - `tests/test_database.py`, `tests/test_file_operations.py`, `tests/test_quick_sort.py`:
   disposable-database, data-integrity, and full UI workflow checks.
+- `tests/test_drag_drop.py`: Qt drag/drop events and copy/move import workflows.
 - `docs/PRD.md`: product requirements.
 - `requirements.txt`: pinned environment dependencies, including Qt support packages.
 - Office extraction uses `python-docx`, `openpyxl`, and `python-pptx`; their
@@ -251,3 +322,4 @@ Transfer references: [Python filesystem operations](https://docs.python.org/3/li
 and [Qt application data locations](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QStandardPaths.html).
 Windows stream references: [file streams](https://learn.microsoft.com/en-us/windows/win32/fileio/file-streams)
 and [FindFirstStreamW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findfirststreamw).
+Drag/drop reference: [Qt drag-and-drop actions and source handling](https://doc.qt.io/qtforpython-6/overviews/qtgui-dnd.html).

@@ -4,7 +4,7 @@ from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QListWidgetItem,
     QMessageBox, QPlainTextEdit, QProgressDialog, QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -12,7 +12,8 @@ from app.database.repository import Repository
 from app.filesystem.safety import SafetyPolicy
 from app.services.file_operation_service import FileOperationService
 from app.services.quick_sort_service import QuickSortService
-from app.ui.dialogs.quick_sort import MoveConfirmationDialog, ShortcutDialog
+from app.ui.dialogs.quick_sort import ExternalTransferDialog, TransferConfirmationDialog, ShortcutDialog
+from app.ui.drag_drop import DropRequest, ShortcutDropList
 
 
 class QuickSortPanel(QWidget):
@@ -41,7 +42,9 @@ class QuickSortPanel(QWidget):
         self.selection_hint.setWordWrap(True)
         self.update_selection_count(0)
         layout.addWidget(self.selection_hint)
-        self.shortcuts = QListWidget()
+        self.shortcuts = ShortcutDropList()
+        self.shortcuts.drop_policy = policy
+        self.shortcuts.files_dropped.connect(self.request_drop)
         self.shortcuts.setAccessibleName("Quick Sort destinations")
         self.shortcuts.setFixedHeight(48)
         self.shortcuts.itemClicked.connect(self._activate)
@@ -86,6 +89,25 @@ class QuickSortPanel(QWidget):
         item = self.shortcuts.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
+    def activate_keyword(self, keyword: str, auto_repeat: bool = False) -> bool:
+        """Return whether a configured single-letter key was handled.
+
+        All activations reuse the click workflow, including selection snapshots,
+        validation, confirmation, and empty-selection destination navigation.
+        """
+        keyword = keyword.casefold()
+        if len(keyword) != 1 or not "a" <= keyword <= "z":
+            return False
+        for row in range(self.shortcuts.count()):
+            item = self.shortcuts.item(row)
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if data["keyword"].strip().casefold() == keyword:
+                if self.initialized and not self.busy and not auto_repeat:
+                    self.shortcuts.setCurrentItem(item)
+                    self._activate(item)
+                return True
+        return False
+
     def _set_busy(self, busy: bool) -> None:
         self.busy = busy
         self.controls.setEnabled(not busy and self.initialized)
@@ -122,6 +144,9 @@ class QuickSortPanel(QWidget):
             item = QListWidgetItem(f"[{shortcut['keyword']}] {shortcut['name']}")
             item.setData(Qt.ItemDataRole.UserRole, shortcut)
             item.setToolTip(shortcut["destination_path"])
+            key = shortcut["keyword"].strip().upper()
+            if len(key) == 1 and "A" <= key <= "Z":
+                item.setToolTip(f"{shortcut['destination_path']}\nPress {key} while the file list has focus to activate.")
             self.shortcuts.addItem(item)
             if selected and shortcut["id"] == selected["id"]:
                 self.shortcuts.setCurrentItem(item)
@@ -182,34 +207,51 @@ class QuickSortPanel(QWidget):
             return
         self._start("plan", lambda progress: self.service.plan(sources, shortcut["destination_path"]), "Checking files and conflicts…")
 
+    def request_drop(self, request: DropRequest) -> None:
+        """Snapshot the drop intent, choose external mode, then validate in a worker."""
+        if self.busy or not self.initialized:
+            return
+        operation = request.operation
+        if request.external:
+            self._set_busy(True)
+            dialog = ExternalTransferDialog(request.sources, request.destination, self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                self._set_busy(False)
+                return
+            operation = dialog.operation()
+        self._start(
+            "plan", lambda progress: self.service.plan(list(request.sources), request.destination, operation),
+            "Checking dropped files and conflicts…",
+        )
+
     def _history(self) -> None:
         if not self.busy:
             self._start("history", lambda progress: self.repository.history(), "Loading history…")
 
     def execute(self, plan, decisions) -> None:
-        self._start("move", lambda progress: self.service.move(plan, decisions, self.runner.cancel, progress), "Preparing transfer…", True)
+        self._start("transfer", lambda progress: self.service.transfer(plan, decisions, self.runner.cancel, progress), f"Preparing {plan.operation}…", True)
 
     def _finished(self, name: str, result, error: str) -> None:
         self._close_progress()
         if error:
             self._set_busy(False)
             QMessageBox.warning(self, "Quick Sort could not complete", error)
-            if name == "move":
+            if name == "transfer":
                 self.files_changed.emit()
             return
         if name == "plan":
-            confirmation = MoveConfirmationDialog(result, self)
+            confirmation = TransferConfirmationDialog(result, self)
             if confirmation.exec() == QDialog.DialogCode.Accepted:
                 self.transfer_requested.emit(result, confirmation.decisions())
                 return
-        elif name == "move":
+        elif name == "transfer":
             self.files_changed.emit()
-            self._report("Move results", "\n\n".join(
+            self._report("Transfer results", "\n\n".join(
                 f"{item.status}: {item.source}\n→ {item.destination}\n{item.message}" for item in result
             ))
         elif name == "history":
             self._report("Operation history (latest 1,000 files)", f"History timestamps are UTC.\nDatabase: {self.repository.path}\n\n" + ("\n\n".join(
-                f"{row['operation_date']} | batch {row['operation_status']} | file {row['status']}\n"
+                f"{row['operation_date']} | {row['operation_type']} | batch {row['operation_status']} | file {row['status']}\n"
                 f"{row['source_path']}\n→ {row['destination_path']}\n{row['message']}" for row in result
             ) or "No operations recorded."))
         else:

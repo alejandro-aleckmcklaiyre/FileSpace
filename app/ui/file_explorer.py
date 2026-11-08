@@ -6,10 +6,11 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QFileSystemModel,
-    QTreeView,
     QVBoxLayout,
     QWidget,
 )
+
+from app.ui.drag_drop import FileDragView, selected_file_rows
 
 
 class FileExplorerWidget(QWidget):
@@ -18,6 +19,7 @@ class FileExplorerWidget(QWidget):
     folder_requested = Signal(str)
     file_selected = Signal(str)
     selection_count_changed = Signal(int)
+    files_dropped = Signal(object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -27,14 +29,12 @@ class FileExplorerWidget(QWidget):
         self.location_label = QLabel("Home")
         self.location_label.setObjectName("panelHeading")
         layout.addWidget(self.location_label)
-        self.details = QTreeView()
+        self.details = FileDragView()
+        self.details.files_dropped.connect(self.files_dropped.emit)
         self.details.setAccessibleName("File details")
         self.details.setRootIsDecorated(False)
         self.details.setItemsExpandable(False)
         self.details.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.details.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
-        self.details.setDragEnabled(False)
-        self.details.setAcceptDrops(False)
         self.details.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.details.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.details.doubleClicked.connect(self._open_folder)
@@ -79,4 +79,4 @@ class FileExplorerWidget(QWidget):
     def selected_paths(self) -> list[str]:
         if self.model is None:
             return []
-        return [self.model.filePath(index) for index in self.details.selectionModel().selectedRows(0)]
+        return [self.model.filePath(index) for index in selected_file_rows(self.details)]

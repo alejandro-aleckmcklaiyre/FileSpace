@@ -10,7 +10,7 @@ def check_file_data(path: Path) -> None:
     """Reject special file types not supported by the transfer engine."""
     info = path.stat()
     if not stat.S_ISREG(info.st_mode):
-        raise ValueError("Quick Sort supports regular files only.")
+        raise ValueError("Only regular files can be transferred.")
     if getattr(info, "st_file_attributes", 0) & (stat.FILE_ATTRIBUTE_ENCRYPTED | stat.FILE_ATTRIBUTE_SYSTEM):
         raise ValueError(f"Encrypted/system files are not supported for moves: {path}")
 
@@ -18,6 +18,12 @@ def check_file_data(path: Path) -> None:
 class SafetyPolicy:
     def __init__(self, roots: list[Path]) -> None:
         self.roots = tuple(root.resolve() for root in roots)
+
+    def allows_candidate(self, path: Path) -> bool:
+        """Cheap lexical hover check; worker validation still checks real paths."""
+        if not path.is_absolute():
+            return False
+        return not any(path == root or root in path.parents for root in self.roots)
 
     def check(self, path: Path) -> Path:
         path = path.absolute()

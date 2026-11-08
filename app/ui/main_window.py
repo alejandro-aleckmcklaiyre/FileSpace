@@ -42,6 +42,8 @@ class MainWindow(QMainWindow):
             Repository(database_path), safety_policy or default_policy(database_path),
             self.explorer.selected_paths, self.sidebar,
         )
+        self.explorer.details.drop_policy = self.quick_sort.service.policy
+        self.explorer.details.quick_sort_key_handler = self.quick_sort.activate_keyword
         self.sidebar.content_layout.insertWidget(self.sidebar.content_layout.count() - 1, self.quick_sort)
         self._quick_sort_busy = False
         for panel in (self.sidebar, self.explorer, self.preview):
@@ -69,6 +71,7 @@ class MainWindow(QMainWindow):
         self.explorer.folder_requested.connect(self.browser.navigate)
         self.explorer.file_selected.connect(self._preview_selection)
         self.explorer.selection_count_changed.connect(self.quick_sort.update_selection_count)
+        self.explorer.files_dropped.connect(self.quick_sort.request_drop)
         self.quick_sort.navigate_requested.connect(self.browser.navigate)
         self.quick_sort.busy_changed.connect(self._set_quick_sort_busy)
         self.quick_sort.files_changed.connect(self._refresh)

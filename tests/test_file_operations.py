@@ -39,7 +39,7 @@ class FileOperationTests(unittest.TestCase):
             self.assertTrue(self.file.exists())
             return actual_digest(path)
         with patch.object(operations, "digest", side_effect=verifying):
-            result = operations.move_file(plan, plan.items[0], "move", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "moved")
         self.assertFalse(self.file.exists())
         self.assertEqual((self.destination / self.file.name).read_bytes(), content)
@@ -50,19 +50,19 @@ class FileOperationTests(unittest.TestCase):
         target = self.destination / self.file.name
         target.write_bytes(b"existing")
         plan = self.plan()
-        result = operations.move_file(plan, plan.items[0], "skip", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "skip", self.policy)
         self.assertEqual(result.status, "skipped")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), b"existing")
-        result = operations.move_file(plan, plan.items[0], "move", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
-        result = operations.move_file(plan, plan.items[0], "rename", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "rename", self.policy)
         self.assertEqual(result.status, "moved")
         self.assertEqual(Path(result.destination).suffix, ".txt")
         self.assertEqual(target.read_bytes(), b"existing")
         self.file.write_bytes(b"replacement")
         plan = self.plan()
-        result = operations.move_file(plan, plan.items[0], "replace", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
         self.assertEqual(result.status, "moved", result.message)
         self.assertEqual(target.read_bytes(), b"replacement")
         self.assertFalse(list(self.destination.glob(".filespace-*")))
@@ -72,7 +72,7 @@ class FileOperationTests(unittest.TestCase):
         target.write_bytes(b"old contents")
         plan = self.plan()
         with patch.object(operations, "digest", return_value=b"wrong digest"):
-            result = operations.move_file(plan, plan.items[0], "replace", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), b"old contents")
@@ -81,21 +81,21 @@ class FileOperationTests(unittest.TestCase):
     def test_changed_source_conflict_and_new_conflict_are_rejected(self) -> None:
         plan = self.plan()
         self.file.write_bytes(b"changed")
-        self.assertEqual(operations.move_file(plan, plan.items[0], "move", self.policy).status, "failed")
+        self.assertEqual(operations.transfer_file(plan, plan.items[0], "move", self.policy).status, "failed")
         plan = self.plan()
         target = self.destination / self.file.name
         target.write_bytes(b"new collision")
-        self.assertEqual(operations.move_file(plan, plan.items[0], "move", self.policy).status, "failed")
+        self.assertEqual(operations.transfer_file(plan, plan.items[0], "move", self.policy).status, "failed")
         plan = self.plan()
         target.write_bytes(b"changed collision")
-        self.assertEqual(operations.move_file(plan, plan.items[0], "replace", self.policy).status, "failed")
+        self.assertEqual(operations.transfer_file(plan, plan.items[0], "replace", self.policy).status, "failed")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), b"changed collision")
 
     def test_full_disk_or_copy_error_preserves_original(self) -> None:
         plan = self.plan()
         with patch.object(operations.os, "fsync", side_effect=OSError("Disk full")):
-            result = operations.move_file(plan, plan.items[0], "move", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertTrue(self.file.exists())
         self.assertFalse(list(self.destination.iterdir()))
@@ -107,7 +107,7 @@ class FileOperationTests(unittest.TestCase):
             target.write_bytes(b"arrived later")
             publish(source, target)
         with patch.object(operations, "publish_no_replace", side_effect=race):
-            result = operations.move_file(plan, plan.items[0], "move", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertTrue(self.file.exists())
         self.assertEqual((self.destination / self.file.name).read_bytes(), b"arrived later")
@@ -122,7 +122,7 @@ class FileOperationTests(unittest.TestCase):
                 raise PermissionError("Cannot publish")
             publish(source, destination)
         with patch.object(operations, "publish_no_replace", side_effect=failure):
-            result = operations.move_file(plan, plan.items[0], "replace", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), b"old")
@@ -137,7 +137,7 @@ class FileOperationTests(unittest.TestCase):
                 raise PermissionError("File locked")
             return unlink(path, *args, **kwargs)
         with patch.object(Path, "unlink", locked):
-            result = operations.move_file(plan, plan.items[0], "replace", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
         self.assertEqual(result.status, "needs_review")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), self.file.read_bytes())
@@ -181,7 +181,7 @@ class FileOperationTests(unittest.TestCase):
         plan = self.plan()
         self.destination.rename(self.root / "old_destination")
         self.destination.mkdir()
-        result = operations.move_file(plan, plan.items[0], "move", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertTrue(self.file.exists())
 
@@ -194,7 +194,7 @@ class FileOperationTests(unittest.TestCase):
         original = self.file.read_bytes()
         plan = self.plan()
         self.assertEqual(plan.total_size, len(original) + sum(len(content) for content in data.values()))
-        result = operations.move_file(plan, plan.items[0], "move", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "moved", result.message)
         self.assertFalse(self.file.exists())
         target = Path(result.destination)
@@ -215,7 +215,7 @@ class FileOperationTests(unittest.TestCase):
                 raise OSError("Destination does not support named streams")
             return original_open(path, *args, **kwargs)
         with patch.object(Path, "open", unsupported):
-            result = operations.move_file(plan, plan.items[0], "move", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertIn("original kept", result.message)
         self.assertTrue(self.file.exists())
@@ -229,7 +229,7 @@ class FileOperationTests(unittest.TestCase):
         suffix = ":Zone.Identifier:$DATA"
         with open(str(self.file) + suffix, "wb") as output:
             output.write(b"ZoneId=3")
-        result = operations.move_file(plan, plan.items[0], "move", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
         plan = self.plan()
         original_digest = operations.digest
@@ -238,7 +238,7 @@ class FileOperationTests(unittest.TestCase):
                 return b"corrupt stream"
             return original_digest(path)
         with patch.object(operations, "digest", side_effect=corrupted):
-            result = operations.move_file(plan, plan.items[0], "move", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "move", self.policy)
         self.assertEqual(result.status, "failed")
         self.assertTrue(self.file.exists())
         self.assertFalse(list(self.destination.iterdir()))
@@ -253,7 +253,7 @@ class FileOperationTests(unittest.TestCase):
         with open(str(target) + suffix, "wb") as output:
             output.write(b"existing marker")
         plan = self.plan()
-        result = operations.move_file(plan, plan.items[0], "rename", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "rename", self.policy)
         self.assertEqual(result.status, "moved", result.message)
         with open(result.destination + suffix, "rb") as incoming:
             self.assertEqual(incoming.read(), b"incoming marker")
@@ -263,7 +263,7 @@ class FileOperationTests(unittest.TestCase):
         with open(str(self.file) + suffix, "wb") as output:
             output.write(b"replacement marker")
         plan = self.plan()
-        result = operations.move_file(plan, plan.items[0], "replace", self.policy)
+        result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
         self.assertEqual(result.status, "moved", result.message)
         with open(str(target) + suffix, "rb") as incoming:
             self.assertEqual(incoming.read(), b"replacement marker")
@@ -276,7 +276,7 @@ class FileOperationTests(unittest.TestCase):
         def final_failure(path):
             return b"wrong final digest" if path == target else digest(path)
         with patch.object(operations, "digest", side_effect=final_failure):
-            result = operations.move_file(plan, plan.items[0], "replace", self.policy)
+            result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
         self.assertEqual(result.status, "needs_review")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), self.file.read_bytes())
@@ -290,6 +290,64 @@ class FileOperationTests(unittest.TestCase):
         self.assertEqual(results[0].status, "cancelled")
         self.assertTrue(self.file.exists())
         self.assertFalse(list(self.destination.iterdir()))
+
+    def test_copy_verifies_content_and_never_removes_original(self) -> None:
+        original = self.file.read_bytes()
+        plan = operations.build_plan([str(self.file)], str(self.destination), self.policy, "copy")
+        unlink = Path.unlink
+        def guard(path, *args, **kwargs):
+            if path == self.file:
+                self.fail("Copy attempted to delete its source")
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, "unlink", guard):
+            result = operations.transfer_file(plan, plan.items[0], "copy", self.policy)
+        self.assertEqual(result.status, "copied", result.message)
+        self.assertEqual(self.file.read_bytes(), original)
+        self.assertEqual(Path(result.destination).read_bytes(), original)
+
+    def test_copy_conflicts_skip_rename_replace_and_verify_failure(self) -> None:
+        target = self.destination / self.file.name
+        target.write_bytes(b"old")
+        original = self.file.read_bytes()
+        plan = operations.build_plan([str(self.file)], str(self.destination), self.policy, "copy")
+        self.assertEqual(operations.transfer_file(plan, plan.items[0], "skip", self.policy).status, "skipped")
+        self.assertEqual(operations.transfer_file(plan, plan.items[0], "copy", self.policy).status, "failed")
+        renamed = operations.transfer_file(plan, plan.items[0], "rename", self.policy)
+        self.assertEqual(renamed.status, "copied")
+        self.assertEqual(target.read_bytes(), b"old")
+        with patch.object(operations, "digest", return_value=b"failed verification"):
+            failed = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(target.read_bytes(), b"old")
+        result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
+        self.assertEqual(result.status, "copied", result.message)
+        self.assertEqual(self.file.read_bytes(), original)
+        self.assertEqual(target.read_bytes(), original)
+
+    @unittest.skipUnless(os.name == "nt", "NTFS streams require Windows")
+    def test_copy_preserves_download_marker_on_both_files(self) -> None:
+        marker = b"[ZoneTransfer]\nZoneId=3"
+        suffix = ":Zone.Identifier:$DATA"
+        with open(str(self.file) + suffix, "wb") as output:
+            output.write(marker)
+        plan = operations.build_plan([str(self.file)], str(self.destination), self.policy, "copy")
+        result = operations.transfer_file(plan, plan.items[0], "copy", self.policy)
+        self.assertEqual(result.status, "copied", result.message)
+        for file in (self.file, Path(result.destination)):
+            with open(str(file) + suffix, "rb") as incoming:
+                self.assertEqual(incoming.read(), marker)
+
+    def test_copy_cancellation_preserves_every_source(self) -> None:
+        second = self.source / "second.txt"
+        second.write_bytes(b"second")
+        plan = operations.build_plan([str(self.file), str(second)], str(self.destination), self.policy, "copy")
+        cancel = Event()
+        def record(index, result):
+            cancel.set()
+        results = operations.execute_plan(plan, ["copy", "copy"], self.policy, cancel, record, lambda m: None)
+        self.assertEqual([result.status for result in results], ["copied", "cancelled"])
+        self.assertTrue(self.file.exists())
+        self.assertTrue(second.exists())
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Confirmed file-only moves using staged, content-verified copies.
+"""Confirmed file-only transfers using staged, content-verified copies.
 
 Even same-drive moves copy and verify for a single conservative implementation.
 No directory moves, link following, or silent destination replacement.
@@ -28,7 +28,7 @@ def fingerprint(path: Path) -> tuple[int, ...]:
 
 
 @dataclass(frozen=True)
-class MoveItem:
+class TransferItem:
     source: Path
     source_state: tuple[int, ...]
     target: Path
@@ -38,10 +38,11 @@ class MoveItem:
 
 
 @dataclass(frozen=True)
-class MovePlan:
+class TransferPlan:
     destination: Path
     directory_identity: tuple[int, int]
-    items: tuple[MoveItem, ...]
+    items: tuple[TransferItem, ...]
+    operation: str = "move"
 
     @property
     def total_size(self) -> int:
@@ -49,14 +50,16 @@ class MovePlan:
 
 
 @dataclass
-class MoveResult:
+class TransferResult:
     source: str
     destination: str
     status: str
     message: str = ""
 
 
-def build_plan(sources: list[str], destination: str, policy: SafetyPolicy) -> MovePlan:
+def build_plan(sources: list[str], destination: str, policy: SafetyPolicy, operation: str = "move") -> TransferPlan:
+    if operation not in {"move", "copy"}:
+        raise ValueError("Choose copy or move.")
     if not sources:
         raise ValueError("Select at least one file.")
     folder = policy.check(Path(destination))
@@ -67,7 +70,7 @@ def build_plan(sources: list[str], destination: str, policy: SafetyPolicy) -> Mo
     for value in sources:
         source = policy.check(Path(value))
         if not stat.S_ISREG(source.stat().st_mode):
-            raise ValueError("Quick Sort supports files only; deselect folders.")
+            raise ValueError("Only files can be transferred. Folder transfers are not supported.")
         check_file_data(source)
         target = folder / source.name
         if source.parent == folder:
@@ -84,8 +87,8 @@ def build_plan(sources: list[str], destination: str, policy: SafetyPolicy) -> Mo
             check_file_data(target)
             target_state = fingerprint(target)
             target_streams = named_streams(target)
-        items.append(MoveItem(source, fingerprint(source), target, target_state, named_streams(source), target_streams))
-    return MovePlan(folder, (info.st_dev, info.st_ino), tuple(items))
+        items.append(TransferItem(source, fingerprint(source), target, target_state, named_streams(source), target_streams))
+    return TransferPlan(folder, (info.st_dev, info.st_ino), tuple(items), operation)
 
 
 def digest(path: Path) -> bytes:
@@ -138,26 +141,28 @@ def verify_streams(source: Path, copy: Path, streams: tuple[tuple[str, int], ...
             raise ValueError("File metadata verification failed; original kept.")
 
 
-def _check_destination(plan: MovePlan, policy: SafetyPolicy) -> None:
+def _check_destination(plan: TransferPlan, policy: SafetyPolicy) -> None:
     folder = policy.check(plan.destination)
     info = folder.stat()
     if (info.st_dev, info.st_ino) != plan.directory_identity or not folder.is_dir():
         raise ValueError("Destination changed since confirmation.")
 
 
-def move_file(plan: MovePlan, item: MoveItem, action: str, policy: SafetyPolicy,
-              progress: Callable[[str], None] = lambda message: None) -> MoveResult:
+def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: SafetyPolicy,
+              progress: Callable[[str], None] = lambda message: None) -> TransferResult:
     """Finish one file without interruption; cancellation happens between files."""
     target = item.target
     stage: Path | None = None
     backup: Path | None = None
     published = False
-    failed_result: MoveResult | None = None
+    failed_result: TransferResult | None = None
     try:
-        if action not in {"move", "skip", "rename", "replace"}:
+        if plan.operation not in {"move", "copy"}:
+            raise ValueError("Unknown transfer operation.")
+        if action not in {plan.operation, "skip", "rename", "replace"}:
             raise ValueError("Unknown conflict decision.")
         if action == "skip":
-            return MoveResult(str(item.source), str(target), "skipped", "Skipped by user.")
+            return TransferResult(str(item.source), str(target), "skipped", "Skipped by user.")
         _check_destination(plan, policy)
         policy.check(item.source)
         check_file_data(item.source)
@@ -167,7 +172,7 @@ def move_file(plan: MovePlan, item: MoveItem, action: str, policy: SafetyPolicy,
             raise ValueError("File metadata streams changed since confirmation.")
         if action == "replace" and item.target_state is None:
             raise ValueError("Replacement was not part of the confirmed conflict.")
-        if item.target_state is not None and action == "move":
+        if item.target_state is not None and action in {"move", "copy"}:
             raise FileExistsError("Conflict requires an explicit decision.")
         if action == "rename":
             number = 1
@@ -224,13 +229,18 @@ def move_file(plan: MovePlan, item: MoveItem, action: str, policy: SafetyPolicy,
             raise ValueError("Source changed during final verification; original preserved.")
         if fingerprint(policy.check(target)) != published_state:
             raise ValueError("Destination changed during final verification; original preserved.")
-        item.source.unlink()
-        if item.source.exists():
-            raise OSError("Source removal could not be verified.")
+        if plan.operation == "move":
+            item.source.unlink()
+            if item.source.exists():
+                raise OSError("Source removal could not be verified.")
         if backup is not None:
             backup.unlink()
             backup = None
-        return MoveResult(str(item.source), str(target), "moved", "Copied, SHA-256 verified, then original removed.")
+        return TransferResult(
+            str(item.source), str(target), "moved" if plan.operation == "move" else "copied",
+            "Copied, SHA-256 verified, then original removed." if plan.operation == "move"
+            else "Copied and SHA-256 verified; original retained.",
+        )
     except Exception as error:
         message = str(error)
         if published:
@@ -244,7 +254,7 @@ def move_file(plan: MovePlan, item: MoveItem, action: str, policy: SafetyPolicy,
                     pass
             if backup is not None:
                 message += f" Previous destination preserved at {backup}."
-        failed_result = MoveResult(str(item.source), str(target), "needs_review" if published else "failed", message)
+        failed_result = TransferResult(str(item.source), str(target), "needs_review" if published else "failed", message)
         return failed_result
     finally:
         if stage is not None:
@@ -255,17 +265,17 @@ def move_file(plan: MovePlan, item: MoveItem, action: str, policy: SafetyPolicy,
                     failed_result.message += f" Staging file could not be removed: {stage} ({cleanup_error})."
 
 
-def execute_plan(plan: MovePlan, decisions: list[str], policy: SafetyPolicy, cancel: Event,
-                 record: Callable[[int, MoveResult], None], progress: Callable[[str], None]) -> list[MoveResult]:
+def execute_plan(plan: TransferPlan, decisions: list[str], policy: SafetyPolicy, cancel: Event,
+                 record: Callable[[int, TransferResult], None], progress: Callable[[str], None]) -> list[TransferResult]:
     if len(decisions) != len(plan.items):
         raise ValueError("Every selected file needs a decision.")
     results = []
     for index, (item, action) in enumerate(zip(plan.items, decisions)):
         if cancel.is_set():
-            result = MoveResult(str(item.source), str(item.target), "cancelled", "Cancelled before starting this file.")
+            result = TransferResult(str(item.source), str(item.target), "cancelled", "Cancelled before starting this file.")
         else:
             progress(f"File {index + 1}/{len(plan.items)}: {item.source.name}")
-            result = move_file(plan, item, action, policy, progress)
+            result = transfer_file(plan, item, action, policy, progress)
         record(index, result)  # A journal failure stops subsequent transfers.
         results.append(result)
     return results

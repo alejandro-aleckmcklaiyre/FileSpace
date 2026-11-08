@@ -58,7 +58,7 @@ class DatabaseTests(unittest.TestCase):
         for file in files:
             file.write_bytes(b"temporary fixture")
         plan = self.service.plan([str(file) for file in files], str(self.destination))
-        results = self.service.move(plan, ["move", "skip"], Event(), lambda message: None)
+        results = self.service.transfer(plan, ["move", "skip"], Event(), lambda message: None)
         self.assertEqual([item.status for item in results], ["moved", "skipped"])
         history = Repository(self.repo.path).history()
         self.assertEqual(len(history), 2)
@@ -72,7 +72,7 @@ class DatabaseTests(unittest.TestCase):
         plan = self.service.plan([str(source)], str(self.destination))
         with patch.object(self.repo, "start_operation", side_effect=sqlite3.OperationalError("Disk full")):
             with self.assertRaises(sqlite3.OperationalError):
-                self.service.move(plan, ["move"], Event(), lambda message: None)
+                self.service.transfer(plan, ["move"], Event(), lambda message: None)
         self.assertTrue(source.exists())
         self.assertFalse(list(self.destination.iterdir()))
 
@@ -83,7 +83,7 @@ class DatabaseTests(unittest.TestCase):
         plan = self.service.plan([str(first), str(second)], str(self.destination))
         with patch.object(self.repo, "record_item", side_effect=sqlite3.OperationalError("Journal unavailable")):
             with self.assertRaisesRegex(RuntimeError, "Inspect both paths"):
-                self.service.move(plan, ["move", "move"], Event(), lambda message: None)
+                self.service.transfer(plan, ["move", "move"], Event(), lambda message: None)
         self.assertTrue((self.destination / first.name).exists())
         self.assertTrue(second.exists())
         self.assertTrue(all(row["operation_status"] == "needs_review" for row in self.repo.history()))
@@ -102,7 +102,7 @@ class DatabaseTests(unittest.TestCase):
         plan = self.service.plan([str(source)], str(self.destination))
         with patch.object(self.repo, "finish_operation", side_effect=sqlite3.OperationalError("Disk full")):
             with self.assertRaisesRegex(RuntimeError, "Transfers have finished"):
-                self.service.move(plan, ["move"], Event(), lambda message: None)
+                self.service.transfer(plan, ["move"], Event(), lambda message: None)
         self.assertFalse(source.exists())
         self.assertEqual((self.destination / source.name).read_bytes(), b"done")
         self.assertEqual(self.repo.history()[0]["status"], "moved")
