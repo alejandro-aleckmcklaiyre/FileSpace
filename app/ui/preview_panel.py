@@ -1,6 +1,6 @@
 """Preview presentation, media lifecycle, and metadata."""
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -179,6 +179,16 @@ class PreviewPanel(QWidget):
 
     def shutdown(self) -> None:
         self._clear()
+
+    def release_for_transfer(self, callback) -> None:
+        """Wait asynchronously until any parser holding a source file finishes."""
+        self.select_file("")
+        def check():
+            if self.service.idle:
+                callback()
+            else:
+                QTimer.singleShot(50, check)
+        check()
 
     def _toggle_play(self) -> None:
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:

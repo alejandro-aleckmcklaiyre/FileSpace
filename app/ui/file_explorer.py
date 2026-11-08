@@ -17,6 +17,7 @@ class FileExplorerWidget(QWidget):
 
     folder_requested = Signal(str)
     file_selected = Signal(str)
+    selection_count_changed = Signal(int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -34,6 +35,8 @@ class FileExplorerWidget(QWidget):
         self.details.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         self.details.setDragEnabled(False)
         self.details.setAcceptDrops(False)
+        self.details.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.details.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.details.doubleClicked.connect(self._open_folder)
         self.model: QFileSystemModel | None = None
         layout.addWidget(self.details)
@@ -47,7 +50,11 @@ class FileExplorerWidget(QWidget):
         self.details.setModel(self.model)
         self.details.setRootIndex(self.model.setRootPath(location))
         self.details.selectionModel().currentChanged.connect(self._selection_changed)
+        self.details.selectionModel().selectionChanged.connect(
+            lambda selected, deselected: self.selection_count_changed.emit(len(self.selected_paths()))
+        )
         self.file_selected.emit("")
+        self.selection_count_changed.emit(0)
         header = self.details.header()
         # Native Qt order is Name, Size, Type, Date Modified.
         header.moveSection(header.visualIndex(2), 1)
@@ -68,3 +75,8 @@ class FileExplorerWidget(QWidget):
             self.file_selected.emit(self.model.filePath(current.siblingAtColumn(0)))
         else:
             self.file_selected.emit("")
+
+    def selected_paths(self) -> list[str]:
+        if self.model is None:
+            return []
+        return [self.model.filePath(index) for index in self.details.selectionModel().selectedRows(0)]

@@ -48,10 +48,7 @@ class SidebarWidget(QScrollArea):
         layout.addWidget(self.drives)
         self.refresh_drives()
 
-        for title, message in (
-            ("FAVORITES", "No favorite folders yet."),
-            ("QUICK SORT", "No destinations configured."),
-        ):
+        for title, message in (("FAVORITES", "No favorite folders yet."),):
             label = QLabel(title)
             label.setObjectName("sectionHeading")
             layout.addWidget(label)
@@ -59,6 +56,7 @@ class SidebarWidget(QScrollArea):
             description.setWordWrap(True)
             layout.addWidget(description)
             layout.addSpacing(16)
+        self.content_layout = layout
         layout.addStretch()
         self.setWidget(content)
 
@@ -73,3 +71,10 @@ class SidebarWidget(QScrollArea):
             item.setToolTip(path)
             self.drives.addItem(item)
         self.drives.setFixedHeight(max(70, min(180, self.drives.count() * 32 + 8)))
+
+    def fit_lists(self) -> None:
+        """Let the outer sidebar scroll instead of clipping standard locations."""
+        for widget in (self.locations, self.drives):
+            widget.ensurePolished()
+            height = sum(widget.sizeHintForRow(row) for row in range(widget.count()))
+            widget.setFixedHeight(max(40, height + 2 * widget.frameWidth() + 4))

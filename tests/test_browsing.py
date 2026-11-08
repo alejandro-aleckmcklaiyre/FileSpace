@@ -93,12 +93,13 @@ class BrowsingTests(unittest.TestCase):
 
     def test_window_listing_refresh_and_read_only(self) -> None:
         with patch("app.ui.main_window.standard_locations", return_value=[("Home", str(self.root))]):
-            window = MainWindow()
+            window = MainWindow(database_path=self.root / "state" / "test.sqlite3")
         window.show()
         try:
             wait_until(lambda: window.browser.current == self.root)
             view = window.explorer
-            wait_until(lambda: view.model.rowCount(view.details.rootIndex()) == 2)
+            wait_until(lambda: window.quick_sort.initialized and not window.quick_sort.busy)
+            wait_until(lambda: view.model.rowCount(view.details.rootIndex()) == 3)
             self.assertTrue(view.model.isReadOnly())
             self.assertEqual(view.details.editTriggers(), QAbstractItemView.EditTrigger.NoEditTriggers)
             self.assertEqual(view.details.dragDropMode(), QAbstractItemView.DragDropMode.NoDragDrop)
@@ -115,7 +116,7 @@ class BrowsingTests(unittest.TestCase):
             previous = view.model
             window.navigation.buttons["Refresh"].click()
             wait_until(lambda: view.model is not previous)
-            wait_until(lambda: view.model.rowCount(view.details.rootIndex()) == 3)
+            wait_until(lambda: view.model.rowCount(view.details.rootIndex()) == 4)
             window.navigation.preview_button.click()
             self.assertFalse(window.preview.isVisible())
             window.navigation.preview_button.click()

@@ -88,6 +88,10 @@ class FilePreviewService(QObject):
         self._token += 1
         self._pending = None
 
+    @property
+    def idle(self) -> bool:
+        return self._active is None and self._pending is None
+
     def request(self, path: str, page: int = 0) -> None:
         self._token += 1
         self._pending = (self._token, path, page)
