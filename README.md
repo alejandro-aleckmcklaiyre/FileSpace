@@ -5,9 +5,14 @@ See [the PRD](docs/PRD.md) for the product requirements and milestones.
 
 ## Current scope
 
-Milestone 1 provides a resizable window titled **FileSpace**, initially
-1200 × 800 logical pixels. The window is intentionally empty. File browsing,
-previews, Quick Sort, storage, and file operations belong to later milestones.
+Milestone 2 provides a resizable window titled **FileSpace**, initially
+1200 × 800 logical pixels, with a navigation bar, scrollable sidebar, empty
+file details view, and preview placeholder. Drag the dividers to resize panels.
+Select a sidebar location to update its display label. The Preview button hides
+and restores the preview panel, preserving its previous proportions.
+
+Navigation buttons, path entry, and search are not connected to filesystem
+functionality yet. File browsing, previews, Quick Sort, storage, and file operations belong to later milestones.
 The application does not read, move, copy, or delete user files.
 
 ## Development setup (PowerShell)
@@ -56,6 +61,8 @@ Check Qt's window, PDF, and multimedia modules:
 
 Launch the app and confirm the title, resizing, normal closing, and absence of
 tracebacks. Windows display scaling may change its physical pixel dimensions.
+For Milestone 2, also check sidebar selection, panel dividers, preview hiding
+and restoration, and sidebar scrolling at the minimum window height.
 Module imports establish availability, not PDF rendering or codec playback;
 those features will be tested in Milestone 4.
 
@@ -70,6 +77,10 @@ FileSpace.
 - `main.py`: thin launcher.
 - `app/main.py`: application initialization and event loop.
 - `app/ui/main_window.py`: desktop window, separate from future file operations.
+- `app/ui/navigation_bar.py`: navigation controls and preview toggle signal.
+- `app/ui/sidebar.py`: scrollable location choices and destination sections.
+- `app/ui/file_explorer.py`: empty details view and selected-location label.
+- `app/ui/preview_panel.py`: preview empty state.
 - `docs/PRD.md`: product requirements.
 - `requirements.txt`: pinned environment dependencies, including Qt support packages.
 - `.gitignore`: excludes the local environment, caches, and build output.
