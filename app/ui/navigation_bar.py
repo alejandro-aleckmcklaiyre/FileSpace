@@ -1,4 +1,4 @@
-"""Navigation controls, ready for later browsing integration."""
+"""Navigation controls and the preview visibility toggle."""
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
@@ -13,17 +13,18 @@ class NavigationBar(QWidget):
         super().__init__()
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
+        self.buttons: dict[str, QPushButton] = {}
         for title in ("Back", "Forward", "Up", "Refresh"):
             button = QPushButton(title)
             button.setEnabled(False)
-            button.setToolTip("Available when file browsing is implemented.")
+            button.setToolTip(title)
+            self.buttons[title] = button
             layout.addWidget(button)
 
         self.address_field = QLineEdit()
         self.address_field.setPlaceholderText("Select a location")
         self.address_field.setAccessibleName("Address")
-        self.address_field.setReadOnly(True)
-        self.address_field.setToolTip("Direct path entry will be available with file browsing.")
+        self.address_field.setToolTip("Enter a folder path and press Enter.")
         layout.addWidget(self.address_field, 2)
 
         self.search_field = QLineEdit()

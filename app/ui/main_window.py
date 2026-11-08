@@ -1,7 +1,10 @@
-"""Compose the main interface without accessing user files."""
+"""Compose the read-only browsing interface."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMainWindow, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QSplitter, QVBoxLayout, QWidget
+
+from app.services.file_browser_service import FileBrowserService
+from app.services.drive_service import standard_locations
 
 from app.ui.file_explorer import FileExplorerWidget
 from app.ui.navigation_bar import NavigationBar
@@ -10,7 +13,7 @@ from app.ui.sidebar import SidebarWidget
 
 
 class MainWindow(QMainWindow):
-    """Coordinate presentation widgets and their interface-only actions."""
+    """Connect presentation widgets to read-only navigation services."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -37,7 +40,7 @@ class MainWindow(QMainWindow):
         self.splitter.setSizes([220, 660, 320])
         layout.addWidget(self.splitter, 1)
         self.setCentralWidget(central)
-        self.statusBar().showMessage("Interface foundation | File browsing is not available yet")
+        self.statusBar().showMessage("Read-only file browsing")
         self.setStyleSheet(
             "QLabel#sectionHeading { font-weight: 600; margin-top: 8px; }"
             "QLabel#panelHeading { font-size: 18px; font-weight: 600; }"
@@ -49,12 +52,51 @@ class MainWindow(QMainWindow):
 
         self._preview_sizes: list[int] = []
         self.navigation.preview_toggled.connect(self._set_preview_visible)
-        self.sidebar.location_selected.connect(self._select_location)
-        self.sidebar.locations.setCurrentRow(0)
+        self.browser = FileBrowserService(self)
+        self.sidebar.location_selected.connect(self.browser.navigate)
+        self.explorer.folder_requested.connect(self.browser.navigate)
+        self.browser.location_changed.connect(self._select_location)
+        self.browser.navigation_failed.connect(self._navigation_failed)
+        self.browser.busy_changed.connect(self._set_busy)
+        for name, action in (
+            ("Back", self.browser.back), ("Forward", self.browser.forward),
+            ("Up", self.browser.up), ("Refresh", self._refresh),
+        ):
+            self.navigation.buttons[name].clicked.connect(action)
+        self.navigation.address_field.returnPressed.connect(
+            lambda: self.browser.navigate(self.navigation.address_field.text())
+        )
+        self.browser.navigate(standard_locations()[0][1])
 
     def _select_location(self, location: str) -> None:
         self.explorer.set_location(location)
         self.navigation.address_field.setText(location)
+        self._update_buttons()
+        self.statusBar().showMessage("Read-only file browsing")
+
+    def _update_buttons(self) -> None:
+        current = self.browser.current
+        self.navigation.buttons["Back"].setEnabled(self.browser.can_back)
+        self.navigation.buttons["Forward"].setEnabled(self.browser.can_forward)
+        self.navigation.buttons["Up"].setEnabled(current is not None and current.parent != current)
+        self.navigation.buttons["Refresh"].setEnabled(current is not None)
+
+    def _set_busy(self, busy: bool) -> None:
+        self.statusBar().showMessage("Checking folder…" if busy else "Read-only file browsing")
+        if busy:
+            for button in self.navigation.buttons.values():
+                button.setEnabled(False)
+        else:
+            self._update_buttons()
+
+    def _navigation_failed(self, message: str) -> None:
+        current = self.browser.current
+        self.navigation.address_field.setText(str(current) if current else "")
+        QMessageBox.warning(self, "Cannot open folder", message)
+
+    def _refresh(self) -> None:
+        self.sidebar.refresh_drives()
+        self.browser.refresh()
 
     def _set_preview_visible(self, visible: bool) -> None:
         if not visible:
