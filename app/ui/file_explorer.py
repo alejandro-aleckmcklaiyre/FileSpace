@@ -16,6 +16,7 @@ class FileExplorerWidget(QWidget):
     """List metadata and request folder navigation without modifying files."""
 
     folder_requested = Signal(str)
+    file_selected = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -45,6 +46,8 @@ class FileExplorerWidget(QWidget):
         self.model.setFilter(QDir.Filter.AllEntries | QDir.Filter.NoDotAndDotDot)
         self.details.setModel(self.model)
         self.details.setRootIndex(self.model.setRootPath(location))
+        self.details.selectionModel().currentChanged.connect(self._selection_changed)
+        self.file_selected.emit("")
         header = self.details.header()
         # Native Qt order is Name, Size, Type, Date Modified.
         header.moveSection(header.visualIndex(2), 1)
@@ -59,3 +62,9 @@ class FileExplorerWidget(QWidget):
             index = index.siblingAtColumn(0)
             if self.model.isDir(index):
                 self.folder_requested.emit(self.model.filePath(index))
+
+    def _selection_changed(self, current: QModelIndex, previous: QModelIndex) -> None:
+        if self.model is not None and current.isValid() and not self.model.isDir(current):
+            self.file_selected.emit(self.model.filePath(current.siblingAtColumn(0)))
+        else:
+            self.file_selected.emit("")

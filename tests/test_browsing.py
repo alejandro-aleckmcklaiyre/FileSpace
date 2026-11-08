@@ -104,6 +104,8 @@ class BrowsingTests(unittest.TestCase):
             self.assertEqual(view.details.dragDropMode(), QAbstractItemView.DragDropMode.NoDragDrop)
             self.assertFalse(view.details.dragEnabled())
             self.assertFalse(view.details.acceptDrops())
+            view.details.setCurrentIndex(view.model.index(str(self.root / "sample.txt")))
+            wait_until(lambda: window.preview.text.toPlainText() == "unchanged")
             view.details.doubleClicked.emit(view.model.index(str(self.child)))
             wait_until(lambda: window.browser.current == self.child)
             self.assertEqual(window.navigation.address_field.text(), str(self.child))

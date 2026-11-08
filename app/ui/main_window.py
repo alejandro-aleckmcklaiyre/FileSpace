@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         self.browser = FileBrowserService(self)
         self.sidebar.location_selected.connect(self.browser.navigate)
         self.explorer.folder_requested.connect(self.browser.navigate)
+        self.explorer.file_selected.connect(self.preview.select_file)
         self.browser.location_changed.connect(self._select_location)
         self.browser.navigation_failed.connect(self._navigation_failed)
         self.browser.busy_changed.connect(self._set_busy)
@@ -104,3 +105,7 @@ class MainWindow(QMainWindow):
         self.preview.setVisible(visible)
         if visible and self._preview_sizes:
             self.splitter.setSizes(self._preview_sizes)
+
+    def closeEvent(self, event) -> None:
+        self.preview.shutdown()
+        super().closeEvent(event)
