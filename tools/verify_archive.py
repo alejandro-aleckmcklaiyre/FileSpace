@@ -1,16 +1,20 @@
 """Extract a local review archive elsewhere and verify its executable."""
 
 import argparse
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
 
 from verify_package import verify
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.version import VERSION
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--archive", type=Path, default=Path("dist/FileSpace-1.0.0-preview-windows-x64.zip"))
+    parser.add_argument("--archive", type=Path, default=Path(f"dist/FileSpace-{VERSION}-windows-x64.zip"))
     parser.add_argument("--report", type=Path, default=Path("artifacts/relocated-smoke.json"))
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="filespace-relocated-") as folder:

@@ -46,6 +46,9 @@ class QuickSortPanel(QWidget):
         self.progress_dialog: QProgressDialog | None = None
         self._action_callback = None
         self._action_mutates = False
+        self.action_title = "File operation"
+        self.cancellable = False
+        self._last_progress = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         heading = QLabel("QUICK SORT")
@@ -127,21 +130,40 @@ class QuickSortPanel(QWidget):
         self.shortcuts.setEnabled(not busy)
         self.busy_changed.emit(busy)
 
-    def _start(self, name, function, label: str, cancellable: bool = False) -> None:
+    def _start(self, name, function, label: str, cancellable: bool = False, title: str = "Quick Sort") -> None:
+        self.action_title, self.cancellable = title, cancellable
+        self._last_progress = label
         self._set_busy(True)
         self.progress_dialog = QProgressDialog(label, "Cancel after current file" if cancellable else "", 0, 0, self.window())
         if not cancellable:
             self.progress_dialog.setCancelButton(None)
-        self.progress_dialog.setWindowTitle("Quick Sort")
+        self.progress_dialog.setWindowTitle(title)
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress_dialog.setMinimumDuration(300)
         self.progress_dialog.setAutoClose(False)
-        self.progress_dialog.canceled.connect(self.runner.cancel.set)
+        self.progress_dialog.canceled.connect(self.request_cancel)
         self.runner.start(name, function)
 
-    def _progress(self, message: str) -> None:
+    def request_cancel(self) -> None:
+        if not self.busy or not self.cancellable:
+            return
+        self.runner.cancel.set()
         if self.progress_dialog is not None:
-            self.progress_dialog.setLabelText(message)
+            self.progress_dialog.setCancelButton(None)
+            self._progress(self._last_progress)
+            # QProgressDialog hides itself when Cancel is clicked. Keep the
+            # current-file progress visible until the worker finishes safely.
+            QTimer.singleShot(0, self._show_cancelling)
+
+    def _show_cancelling(self) -> None:
+        if self.busy and self.progress_dialog is not None:
+            self.progress_dialog.show()
+
+    def _progress(self, message: str) -> None:
+        self._last_progress = message
+        if self.progress_dialog is not None:
+            prefix = "Cancelling after the current file...\n" if self.runner.cancel.is_set() else ""
+            self.progress_dialog.setLabelText(prefix + message)
 
     def _close_progress(self) -> None:
         if self.progress_dialog is not None:
@@ -218,7 +240,7 @@ class QuickSortPanel(QWidget):
         if not sources:
             self.navigate_requested.emit(shortcut["destination_path"])
             return
-        self._start("plan", lambda progress: self.service.plan(sources, shortcut["destination_path"]), "Checking files and conflicts…")
+        self._start("plan", lambda progress: self.service.plan(sources, shortcut["destination_path"]), "Checking files and conflicts…", title="Move")
 
     def request_drop(self, request: DropRequest) -> None:
         """Snapshot the drop intent, choose external mode, then validate in a worker."""
@@ -235,6 +257,7 @@ class QuickSortPanel(QWidget):
         self._start(
             "plan", lambda progress: self.service.plan(list(request.sources), request.destination, operation),
             "Checking dropped files and conflicts…",
+            title=operation.title(),
         )
 
     def _history(self) -> None:
@@ -242,23 +265,23 @@ class QuickSortPanel(QWidget):
             self._start("history", lambda progress: self.repository.history(), "Loading history…")
 
     def execute(self, plan, decisions) -> None:
-        self._start("transfer", lambda progress: self.service.transfer(plan, decisions, self.runner.cancel, progress), f"Preparing {plan.operation}…", True)
+        self._start("transfer", lambda progress: self.service.transfer(plan, decisions, self.runner.cancel, progress), f"Preparing {plan.operation}…", True, plan.operation.title())
 
-    def run_action(self, function, label: str, callback, cancellable=False, mutating=False) -> None:
+    def run_action(self, function, label: str, callback, cancellable=False, mutating=False, title="File action") -> None:
         """Share the serialized worker/progress lifecycle with context-menu actions."""
         if self.busy or self.runner.busy:
             return
         self._action_callback = callback
         self._action_mutates = mutating
-        self._start("action", function, label, cancellable)
+        self._start("action", function, label, cancellable, title)
 
     def _finished(self, name: str, result, error: str) -> None:
         self._close_progress()
         if error:
             self._action_callback = None
             self._set_busy(False)
-            QMessageBox.warning(self, "Quick Sort could not complete", error)
-            if name == "transfer" or (name == "action" and self._action_mutates):
+            QMessageBox.warning(self, f"{self.action_title} could not complete", error)
+            if name == "transfer" or (name == "action" and self._action_mutates) or "Destination folder no longer exists" in error:
                 self.files_changed.emit()
             self._action_mutates = False
             return
@@ -282,7 +305,7 @@ class QuickSortPanel(QWidget):
             self.transfer_completed.emit(result)
             self.files_changed.emit()
             self._report("Transfer results", "\n\n".join(
-                f"{item.status}: {item.source}\n→ {item.destination}\n{item.message}" for item in result
+                f"{item.status.replace('_', ' ')}: {item.source}\n→ {item.destination}\n{item.message}" for item in result
             ))
         elif name == "history":
             self._report("Operation history (latest 1,000 files)", f"History timestamps are UTC.\nDatabase: {self.repository.path}\n\n" + ("\n\n".join(
@@ -295,6 +318,10 @@ class QuickSortPanel(QWidget):
         self._set_busy(False)
 
     def _report(self, title: str, content: str) -> None:
+        if getattr(self.window(), "_close_when_idle", False):
+            # Per-file outcomes are already journaled. Do not hold a requested
+            # safe exit open behind a modal results dialog.
+            return
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         dialog.resize(760, 500)

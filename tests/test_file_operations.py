@@ -138,7 +138,7 @@ class FileOperationTests(unittest.TestCase):
             return unlink(path, *args, **kwargs)
         with patch.object(Path, "unlink", locked):
             result = operations.transfer_file(plan, plan.items[0], "replace", self.policy)
-        self.assertEqual(result.status, "needs_review")
+        self.assertEqual(result.status, "copied_original_retained")
         self.assertTrue(self.file.exists())
         self.assertEqual(target.read_bytes(), self.file.read_bytes())
         backups = list(self.destination.glob("*.backup"))
@@ -174,7 +174,7 @@ class FileOperationTests(unittest.TestCase):
         for roots in ([self.source], [self.destination]):
             with self.assertRaises(ValueError):
                 operations.build_plan([str(self.file)], str(self.destination), SafetyPolicy(roots))
-        with self.assertRaises(OSError):
+        with self.assertRaisesRegex(ValueError, "Destination folder no longer exists"):
             operations.build_plan([str(self.file)], str(self.root / "missing"), self.policy)
 
     def test_destination_identity_change_rejected(self) -> None:

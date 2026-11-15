@@ -48,6 +48,12 @@ class FileExplorerWidget(QWidget):
         self.grid.setViewMode(QListView.ViewMode.IconMode)
         self.grid.setResizeMode(QListView.ResizeMode.Adjust)
         self.grid.setMovement(QListView.Movement.Static)
+        # QListView recomputes drag/drop flags when movement/view mode changes.
+        # Keep icons fixed in place while still allowing our confirmed file drag.
+        self.grid.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.grid.setDragEnabled(True)
+        self.grid.setAcceptDrops(True)
+        self.grid.viewport().setAcceptDrops(True)
         self.grid.setIconSize(QSize(64, 64))
         self.grid.setGridSize(QSize(140, 110))
         self.grid.setWordWrap(True)

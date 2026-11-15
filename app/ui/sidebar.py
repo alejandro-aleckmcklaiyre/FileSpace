@@ -1,9 +1,10 @@
 """Scrollable location choices; no paths are accessed here."""
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QListWidgetItem, QScrollArea, QVBoxLayout, QWidget
 
 from app.services.drive_service import available_drives, standard_locations
+from app.ui.drag_drop import ShortcutDropList
 
 
 class SidebarWidget(QScrollArea):
@@ -22,7 +23,7 @@ class SidebarWidget(QScrollArea):
         heading = QLabel("LOCATIONS")
         heading.setObjectName("sectionHeading")
         layout.addWidget(heading)
-        self.locations = QListWidget()
+        self.locations = ShortcutDropList()
         self.locations.setAccessibleName("Locations")
         for name, path in standard_locations():
             item = QListWidgetItem(name)
@@ -39,7 +40,7 @@ class SidebarWidget(QScrollArea):
         heading = QLabel("DRIVES")
         heading.setObjectName("sectionHeading")
         layout.addWidget(heading)
-        self.drives = QListWidget()
+        self.drives = ShortcutDropList()
         self.drives.setAccessibleName("Available drives")
         self.drives.currentItemChanged.connect(
             lambda current, previous: self._request_location(current) if current else None

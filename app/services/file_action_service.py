@@ -114,6 +114,11 @@ class FileActionService:
                             raise ValueError("Unsupported file action.")
                     except Exception as error:
                         status, message = "needs_review" if changed else "failed", str(error)
+                        logging.getLogger(__name__).warning(
+                            "%s failed: source=%s destination=%s errno=%s winerror=%s: %s",
+                            plan.operation, item.source, destination, getattr(error, "errno", None),
+                            getattr(error, "winerror", None), error,
+                        )
                 result = TransferResult(str(item.source), destination, status, message)
                 results.append(result)
                 try:

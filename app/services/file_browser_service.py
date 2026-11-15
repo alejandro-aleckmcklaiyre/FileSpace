@@ -12,15 +12,29 @@ class _Result(QObject):
 
 
 class _Validation(QRunnable):
-    def __init__(self, token: int, value: str, base: Path | None) -> None:
+    def __init__(self, token: int, value: str, base: Path | None, recover_missing=False) -> None:
         super().__init__()
         self.token, self.value, self.base = token, value, base
+        self.recover_missing = recover_missing
         self.signals = _Result()
 
     @Slot()
     def run(self) -> None:
         try:
-            path = validate_directory(self.value, self.base)
+            try:
+                path = validate_directory(self.value, self.base)
+            except FileNotFoundError:
+                if not self.recover_missing:
+                    raise
+                path = Path(self.value).parent
+                while True:
+                    try:
+                        path = validate_directory(str(path))
+                        break
+                    except FileNotFoundError:
+                        if path.parent == path:
+                            raise
+                        path = path.parent
         except (OSError, ValueError, RuntimeError) as error:
             self.signals.finished.emit(self.token, None, str(error))
         else:
@@ -54,10 +68,10 @@ class FileBrowserService(QObject):
     def can_forward(self) -> bool:
         return self.position + 1 < len(self.history)
 
-    def navigate(self, value: str, target: int | None = None) -> None:
+    def navigate(self, value: str, target: int | None = None, recover_missing=False) -> None:
         self._token += 1
         self._target = target
-        worker = _Validation(self._token, value, self.current)
+        worker = _Validation(self._token, value, self.current, recover_missing)
         self._workers[self._token] = worker
         worker.signals.finished.connect(self._complete)
         self.busy_changed.emit(True)
@@ -93,4 +107,4 @@ class FileBrowserService(QObject):
 
     def refresh(self) -> None:
         if self.current is not None:
-            self.navigate(str(self.current), self.position)
+            self.navigate(str(self.current), recover_missing=True)

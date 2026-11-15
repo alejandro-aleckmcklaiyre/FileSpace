@@ -66,7 +66,7 @@ Or automate extraction into a disposable temporary directory and verification:
 ## Files to review
 
 - `dist/FileSpace/`: complete runnable folder, including `_internal`.
-- `dist/FileSpace-1.0.0-preview-windows-x64.zip`: review archive.
+- `dist/FileSpace-1.0.0-preview.2-windows-x64.zip`: review archive.
 - The adjacent `.sha256`: archive integrity hash.
 - `artifacts/packaged-smoke.json`: measured packaged check results.
 - `build/FileSpace/warn-FileSpace.txt`: dependency analyzer warnings.

@@ -1,6 +1,6 @@
 # Acceptance remediation plan
 
-Status: proposed; implementation awaits owner approval. Preserve the original
+Status: approved and implemented in `1.0.0-preview.2`; packaged owner retesting pending. Preserve the original
 [findings](../FileSpace_acceptance_findings.md) as test evidence. Milestone 8 is a
 packaging preview snapshot, not a signed-off MVP release. UI redesign follows
 reliability corrections and packaged acceptance.
@@ -75,3 +75,29 @@ launcher is useful evidence but does not replace that test.
 Update acceptance results with the tested version/hash and retain old evidence.
 Only consider release sign-off when the blockers and outstanding checks pass.
 The next development work is this stabilization cycle, not another feature milestone.
+
+## Implementation evidence and remaining gates
+
+- Read-only deletion changes only that bit and restores it on failure. Cleanup and
+  rename retry sharing/lock violations up to five attempts over one second; ACL
+  denial is not blindly retried. Backup removal checks its recorded identity/state.
+- Verified outcomes distinguish an incomplete Move (`copied_original_retained`),
+  a completed Copy with cleanup warning (`cleanup_warning`), a completed Move with
+  cleanup warning (`moved_cleanup_warning`), and unverified results (`needs_review`).
+  Warning paths remain visible in History; they do not mark a batch completed.
+- Volume capability checks skip stream enumeration only on confirmed non-stream
+  filesystems. Stream loss is still refused; no metadata-stripping option was added.
+- Grid drag flags are restored after Static movement disables them. Favorites,
+  standard locations and drives now accept confirmed file drops. Gesture/viewport
+  regressions pass; native entry/drop diagnostics are logged. The cause of the
+  reported Details/Explorer native failure is not yet established: retest it before
+  considering Fix 8 closed. This environment denies SetCursorPos even outside the
+  sandbox, so real mouse/OLE verification could not be completed here.
+- Missing Favorites offer removal; refresh recovers from a deleted current folder.
+  Expected rejections log without tracebacks; per-file failures include paths/codes.
+  Containing-folder requests use Explorer selection arguments. Cancellation stays
+  visible and a requested exit waits for the current file and cleanup.
+
+Physical exFAT, native Explorer/Details/Grid drags, disconnect, and a genuinely
+clean Windows machine remain owner acceptance gates. See `STABILIZATION_REPORT.md`
+for final local test/build evidence. Original findings are unchanged.

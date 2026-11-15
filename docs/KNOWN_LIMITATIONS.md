@@ -29,5 +29,9 @@
 - Clean-machine launch, actual Explorer mouse/OLE interactions, Recycle Bin restore,
   physical cross-volume and disconnect scenarios remain manual release-gate checks.
 
-The build is labeled `1.0.0-preview` pending that manual sign-off. UI refinement
+The build is labeled `1.0.0-preview.2` pending that manual sign-off. UI refinement
 can follow this milestone without changing the verified transfer engine.
+
+Preview.2 addresses the reported read-only cleanup and non-stream filesystem
+handling in code and regressions. Physical exFAT behavior and native mouse/OLE
+failures still need owner retesting. No metadata-stripping transfer mode is offered.

@@ -48,9 +48,13 @@ class MainWindow(QMainWindow):
             view.drop_policy = self.quick_sort.service.policy
             view.quick_sort_key_handler = self.quick_sort.activate_keyword
         self.favorites = FavoritesPanel(self.quick_sort.repository, lambda: self.browser.current, self.sidebar)
+        for target in (self.favorites.folders, self.sidebar.locations, self.sidebar.drives):
+            target.drop_policy = self.quick_sort.service.policy
+            target.files_dropped.connect(self.quick_sort.request_drop)
         self.sidebar.content_layout.insertWidget(self.sidebar.content_layout.count() - 1, self.favorites)
         self.sidebar.content_layout.insertWidget(self.sidebar.content_layout.count() - 1, self.quick_sort)
         self._quick_sort_busy = False
+        self._close_when_idle = False
         for panel in (self.sidebar, self.explorer, self.preview):
             self.splitter.addWidget(panel)
         self.splitter.setStretchFactor(0, 0)
@@ -154,7 +158,18 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         if self.quick_sort.busy or self.favorites.busy:
-            QMessageBox.information(self, "Quick Sort is active", "Wait for Quick Sort to finish. During a transfer, Cancel stops after the current file.")
+            if self.quick_sort.busy and self.quick_sort.cancellable:
+                if not self._close_when_idle and QMessageBox.question(
+                    self, f"{self.quick_sort.action_title} is active",
+                    "Cancel remaining files and exit after the current file finishes safely? "
+                    "FileSpace will stay open until verification and staging cleanup complete.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                ) == QMessageBox.StandardButton.Yes:
+                    self._close_when_idle = True
+                    self.quick_sort.request_cancel()
+            else:
+                QMessageBox.information(self, "File operation is active", "Wait for the current file operation to finish before exiting.")
             event.ignore()
             return
         self.preview.shutdown()
@@ -173,6 +188,8 @@ class MainWindow(QMainWindow):
         self.quick_sort.setEnabled(not self.favorites.busy)
         if self._quick_sort_busy:
             self.preview.select_file("")
+        elif self._close_when_idle:
+            QTimer.singleShot(0, self.close)
 
     def _prepare_transfer(self, plan, decisions) -> None:
         self.statusBar().showMessage("Closing active preview before transfer…")

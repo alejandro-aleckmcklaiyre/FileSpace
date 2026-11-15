@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.platform_shell import select_in_explorer
 from app.runtime import external_library_search
 from app.services.file_action_service import FileActionService
 from app.ui.drag_drop import DropRequest
@@ -109,11 +110,17 @@ class FileActions(QObject):
             else:
                 destination = str(Path(path).parent) if action == "containing" else path
                 def launch(text):
+                    if action == "containing":
+                        try:
+                            select_in_explorer(Path(path))
+                        except OSError as error:
+                            QMessageBox.warning(self.window, "Cannot open containing folder", str(error))
+                        return
                     with external_library_search():
                         opened = QDesktopServices.openUrl(QUrl.fromLocalFile(destination))
                     if not opened:
                         QMessageBox.warning(self.window, "Cannot open location", "Windows could not open this file or folder.")
-                self.panel.run_action(lambda progress: self.service.properties([destination]), "Checking location…", launch)
+                self.panel.run_action(lambda progress: self.service.properties([path]), "Checking location…", launch, title="Open containing folder" if action == "containing" else "Open")
         elif action in {"copy", "cut"}:
             if any(self.window.explorer.model.isDir(self.window.explorer.model.index(path)) for path in paths):
                 QMessageBox.information(self.window, "Files only", "Folder transfers are not supported. Select files only.")
@@ -131,9 +138,9 @@ class FileActions(QObject):
             path = Path(paths[0])
             stem, accepted = QInputDialog.getText(self.window, "Rename file", f"New name (extension {path.suffix or '(none)'} is kept)", text=path.stem)
             if accepted:
-                self.panel.run_action(lambda progress: self.service.plan_rename(str(path), stem), "Checking new name…", self._confirm)
+                self.panel.run_action(lambda progress: self.service.plan_rename(str(path), stem), "Checking new name…", self._confirm, title="Rename")
         elif action == "recycle":
-            self.panel.run_action(lambda progress: self.service.plan_recycle(paths), "Checking files for recycling…", self._confirm)
+            self.panel.run_action(lambda progress: self.service.plan_recycle(paths), "Checking files for recycling…", self._confirm, title="Recycle Bin deletion")
 
     def clipboard_payload(self):
         mime = QApplication.clipboard().mimeData()
@@ -150,7 +157,7 @@ class FileActions(QObject):
         return paths, "copy", True
 
     def _transferred(self, results):
-        moved = {Path(item.source) for item in results if item.status == "moved"}
+        moved = {Path(item.source) for item in results if item.status in {"moved", "moved_cleanup_warning"}}
         if self._clipboard_operation == "move" and self._clipboard_paths and all(Path(path) in moved for path in self._clipboard_paths):
             if not self.clipboard_payload()[2]:
                 QApplication.clipboard().clear()
@@ -183,6 +190,7 @@ class FileActions(QObject):
             self.panel.run_action(
                 lambda progress: self.service.execute(plan, self.panel.runner.cancel, progress),
                 "Applying confirmed file action…", self._results, cancellable=True, mutating=True,
+                title="Rename" if plan.operation == "rename" else "Recycle Bin deletion",
             )
         self.window.preview.release_for_transfer(released)
 

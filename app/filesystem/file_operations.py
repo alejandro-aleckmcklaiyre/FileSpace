@@ -5,6 +5,7 @@ No directory moves, link following, or silent destination replacement.
 """
 
 import hashlib
+import logging
 import os
 import shutil
 import stat
@@ -15,9 +16,10 @@ from pathlib import Path
 from threading import Event
 from uuid import uuid4
 
+from app.filesystem.cleanup import remove_file, retry_locked, set_readonly
 from app.filesystem.path_validator import validate_directory
 from app.filesystem.safety import SafetyPolicy, check_file_data
-from app.filesystem.streams import named_streams, stream_path
+from app.filesystem.streams import named_streams, stream_path, supports_named_streams
 
 CHUNK_SIZE = 1024 * 1024
 
@@ -62,7 +64,10 @@ def build_plan(sources: list[str], destination: str, policy: SafetyPolicy, opera
         raise ValueError("Choose copy or move.")
     if not sources:
         raise ValueError("Select at least one file.")
-    folder = policy.check(Path(destination))
+    try:
+        folder = policy.check(Path(destination))
+    except FileNotFoundError as error:
+        raise ValueError("Destination folder no longer exists.") from error
     validate_directory(str(folder))
     info = folder.stat()
     items = []
@@ -102,7 +107,12 @@ def digest(path: Path) -> bytes:
 def publish_no_replace(source: Path, target: Path) -> None:
     """Windows rename rejects an existing target; POSIX needs a no-clobber link."""
     if os.name == "nt":
-        os.rename(source, target)
+        state = fingerprint(source)
+        def rename():
+            if fingerprint(source) != state:
+                raise ValueError("File changed during rename; no action performed.")
+            os.rename(source, target)
+        retry_locked(rename)
     else:
         os.link(source, target)
         source.unlink()
@@ -142,7 +152,10 @@ def verify_streams(source: Path, copy: Path, streams: tuple[tuple[str, int], ...
 
 
 def _check_destination(plan: TransferPlan, policy: SafetyPolicy) -> None:
-    folder = policy.check(plan.destination)
+    try:
+        folder = policy.check(plan.destination)
+    except FileNotFoundError as error:
+        raise ValueError("Destination folder no longer exists.") from error
     info = folder.stat()
     if (info.st_dev, info.st_ino) != plan.directory_identity or not folder.is_dir():
         raise ValueError("Destination changed since confirmation.")
@@ -154,7 +167,10 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
     target = item.target
     stage: Path | None = None
     backup: Path | None = None
+    backup_state: tuple[int, ...] | None = None
     published = False
+    verified = False
+    source_removed = False
     failed_result: TransferResult | None = None
     try:
         if plan.operation not in {"move", "copy"}:
@@ -170,6 +186,8 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
             raise ValueError("Source changed since confirmation.")
         if named_streams(item.source) != item.source_streams:
             raise ValueError("File metadata streams changed since confirmation.")
+        if item.source_streams and not supports_named_streams(plan.destination):
+            raise ValueError("Destination does not support file metadata streams; original kept. Choose an NTFS destination.")
         if action == "replace" and item.target_state is None:
             raise ValueError("Replacement was not part of the confirmed conflict.")
         if item.target_state is not None and action in {"move", "copy"}:
@@ -207,6 +225,9 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
             raise ValueError("Copy verification failed; original preserved.")
         verify_streams(item.source, stage, item.source_streams, stream_hashes)
         shutil.copystat(item.source, stage, follow_symlinks=False)
+        source_readonly = not bool(item.source.stat().st_mode & stat.S_IWRITE)
+        if source_readonly:
+            set_readonly(stage, False)
         _check_destination(plan, policy)
         if action == "replace":
             if fingerprint(policy.check(target)) != item.target_state or named_streams(target) != item.target_streams:
@@ -214,10 +235,13 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
             check_file_data(target)
             backup = target.with_name(f".filespace-{uuid4().hex}.backup")
             publish_no_replace(target, backup)
+            backup_state = fingerprint(backup)
         # A newly appearing file always causes failure, including rename races.
         publish_no_replace(stage, target)
         stage = None
         published = True
+        if source_readonly:
+            set_readonly(target, True)
         published_state = fingerprint(target)
         policy.check(item.source)
         check_file_data(item.source)
@@ -229,12 +253,14 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
             raise ValueError("Source changed during final verification; original preserved.")
         if fingerprint(policy.check(target)) != published_state:
             raise ValueError("Destination changed during final verification; original preserved.")
+        verified = True
         if plan.operation == "move":
-            item.source.unlink()
+            remove_file(item.source, item.source_state)
             if item.source.exists():
                 raise OSError("Source removal could not be verified.")
+            source_removed = True
         if backup is not None:
-            backup.unlink()
+            remove_file(backup, backup_state)
             backup = None
         return TransferResult(
             str(item.source), str(target), "moved" if plan.operation == "move" else "copied",
@@ -242,8 +268,19 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
             else "Copied and SHA-256 verified; original retained.",
         )
     except Exception as error:
+        logging.getLogger(__name__).warning(
+            "%s failed: source=%s destination=%s errno=%s winerror=%s: %s",
+            plan.operation, item.source, target, getattr(error, "errno", None),
+            getattr(error, "winerror", None), error,
+        )
         message = str(error)
-        if published:
+        if verified:
+            message += f" Copy SHA-256 and metadata verified at {target}."
+            if plan.operation == "move" and not source_removed:
+                message += f" Copied; original not removed: {item.source}."
+            else:
+                message += " Transfer completed with a cleanup warning."
+        elif published:
             message += f" Transfer may be incomplete; inspect the source and destination: {target}."
         if backup is not None and backup.exists():
             if not target.exists():
@@ -254,12 +291,17 @@ def transfer_file(plan: TransferPlan, item: TransferItem, action: str, policy: S
                     pass
             if backup is not None:
                 message += f" Previous destination preserved at {backup}."
-        failed_result = TransferResult(str(item.source), str(target), "needs_review" if published else "failed", message)
+        if verified:
+            status = "moved_cleanup_warning" if source_removed else "copied_original_retained" if plan.operation == "move" else "cleanup_warning"
+        else:
+            status = "needs_review" if published else "failed"
+        failed_result = TransferResult(str(item.source), str(target), status, message)
         return failed_result
     finally:
         if stage is not None:
             try:
-                stage.unlink(missing_ok=True)
+                if stage.exists():
+                    remove_file(stage)
             except OSError as cleanup_error:
                 if failed_result is not None:
                     failed_result.message += f" Staging file could not be removed: {stage} ({cleanup_error})."

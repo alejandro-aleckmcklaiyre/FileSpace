@@ -15,7 +15,10 @@ def validate_directory(value: str, base: Path | None = None) -> Path:
     path = Path(value).expanduser()
     if not path.is_absolute() and base is not None:
         path = base / path
-    path = path.resolve(strict=True)
+    try:
+        path = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise FileNotFoundError(f"Folder no longer exists: {path}") from error
     if not path.is_dir():
         raise NotADirectoryError(f"Not a folder: {path}")
     with os.scandir(path) as entries:

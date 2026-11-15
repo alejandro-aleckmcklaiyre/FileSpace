@@ -74,3 +74,16 @@ Folder mutations, links/junctions/cloud reparse-point moves, encrypted/system fi
 transfers, protected locations, and case-only renames remain excluded. See
 `KNOWN_LIMITATIONS.md` and the manual acceptance checklist before relying on this
 preview for important file organization.
+
+## Preview.2 transfer feedback
+
+Read-only file moves and replacements retain final Read-only attributes. Plain
+files can target filesystems without named streams; files with streams are refused
+if those streams cannot be preserved. No metadata is silently discarded.
+
+A verified copy with an original that could not be removed is reported as
+`copied original retained`. A completed transfer with leftover cleanup reports a
+cleanup warning and recovery path. Inspect History before retrying either case.
+Cancel finishes the current file safely and keeps progress visible. Closing during
+an active cancellable action offers to cancel remaining files and exit once safe.
+Favorites whose folders were deleted can be removed when activated.

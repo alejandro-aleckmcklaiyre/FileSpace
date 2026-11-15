@@ -23,7 +23,12 @@ class _Job(QRunnable):
         try:
             result = self.function(self.signals.progress.emit)
         except Exception as error:
-            logging.getLogger(__name__).exception("File operation task failed: %s", self.name)
+            logger = logging.getLogger(__name__)
+            if isinstance(error, (ValueError, OSError)):
+                logger.warning("Task %s rejected: errno=%s winerror=%s: %s", self.name,
+                               getattr(error, "errno", None), getattr(error, "winerror", None), error)
+            else:
+                logger.exception("File operation task failed: %s", self.name)
             self.signals.done.emit(self.name, None, str(error))
         else:
             self.signals.done.emit(self.name, result, "")
@@ -44,7 +49,7 @@ class FileOperationService(QObject):
 
     def start(self, name: str, function: Callable) -> None:
         if self.busy:
-            raise RuntimeError("Another Quick Sort task is still running.")
+            raise RuntimeError("Another file operation is still running.")
         self.cancel.clear()
         self._job = _Job(name, function)
         self._job.signals.done.connect(self._done)

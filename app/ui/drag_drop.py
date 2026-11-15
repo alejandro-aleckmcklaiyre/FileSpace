@@ -5,6 +5,7 @@ FileSpace cannot let another application perform an unconfirmed move.
 """
 
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -122,6 +123,10 @@ class _DropTarget:
             event.accept()
         else:
             event.ignore()
+        logging.getLogger(__name__).info(
+            "Drag entry: target=%s files=%d external=%s accepted=%s enabled=%s action=%s",
+            type(self).__name__, len(paths), external, event.isAccepted(), self.isEnabled(), action,
+        )
 
     def dragMoveEvent(self, event) -> None:
         request = self._request(event)
@@ -139,8 +144,11 @@ class _DropTarget:
         request = self._request(event)
         self._clear_feedback()
         if request is None:
+            logging.getLogger(__name__).info("Drop rejected: target=%s", type(self).__name__)
             event.ignore()
             return
+        logging.getLogger(__name__).info("Drop accepted: target=%s operation=%s files=%d destination=%s",
+                                         type(self).__name__, request.operation, len(request.sources), request.destination)
         event.setDropAction(transport_action(event, request.external))
         event.accept()
         # Return to Qt/the shell first. Do not retain the event or its MIME data.
@@ -253,4 +261,5 @@ class ShortcutDropList(_DropTarget, QListWidget):
         if item is None:
             return "", self.viewport().rect().adjusted(1, 1, -1, -1)
         data = item.data(Qt.ItemDataRole.UserRole)
-        return (data.get("destination_path", "") if isinstance(data, dict) else ""), self.visualItemRect(item)
+        destination = data.get("destination_path", data.get("folder_path", "")) if isinstance(data, dict) else data
+        return (destination if isinstance(destination, str) else ""), self.visualItemRect(item)

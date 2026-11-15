@@ -40,8 +40,8 @@ From this project directory, launch the packaged app without activating Python:
 ```
 
 Keep the complete `dist\FileSpace` folder together, including `_internal`.
-The review ZIP is `dist\FileSpace-1.0.0-preview-windows-x64.zip`; extract it
-before launching. The build is `1.0.0-preview`, not an installer or a published
+The review ZIP is `dist\FileSpace-1.0.0-preview.2-windows-x64.zip`; extract it
+before launching. The build is `1.0.0-preview.2`, not an installer or a published
 release. Native Windows/clean-machine acceptance remains a release gate.
 
 Read [the user guide](docs/USER_GUIDE.md), [Windows build instructions](docs/WINDOWS_BUILD.md),
@@ -422,3 +422,7 @@ and [FindFirstStreamW](https://learn.microsoft.com/en-us/windows/win32/api/filea
 Drag/drop reference: [Qt drag-and-drop actions and source handling](https://doc.qt.io/qtforpython-6/overviews/qtgui-dnd.html).
 Milestone 7 references: [Qt proxy models](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QSortFilterProxyModel.html)
 and [Qt Recycle Bin support](https://doc.qt.io/qt-6/qfile.html#moveToTrash).
+
+Preview.2 stabilization results and remaining native acceptance gates are recorded
+in [the stabilization report](docs/STABILIZATION_REPORT.md). The original manual
+findings remain preserved; release sign-off is still pending packaged retesting.

@@ -1,8 +1,12 @@
 """Archive the complete local build for review; never upload or publish it."""
 
 import hashlib
+import sys
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.version import VERSION
 
 
 def main() -> int:
@@ -10,7 +14,7 @@ def main() -> int:
     package = project / "dist/FileSpace"
     if not (package / "FileSpace.exe").is_file():
         raise SystemExit("Build FileSpace first.")
-    archive = project / "dist/FileSpace-1.0.0-preview-windows-x64.zip"
+    archive = project / f"dist/FileSpace-{VERSION}-windows-x64.zip"
     with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as output:
         for path in sorted(package.rglob("*")):
             if path.is_file():
