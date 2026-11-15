@@ -10,7 +10,7 @@ def migrate(path: Path) -> None:
     with connect(path) as db:
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 1:
+        if version > 2:
             raise ValueError("This database was created by a newer FileSpace version.")
         if version == 0:
             statements = (
@@ -32,3 +32,9 @@ def migrate(path: Path) -> None:
             for statement in statements:
                 db.execute(statement)
             db.execute("PRAGMA user_version = 1")
+        if version < 2:
+            db.execute("""CREATE TABLE favorites (
+                id INTEGER PRIMARY KEY, name TEXT NOT NULL,
+                folder_path TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))""")
+            db.execute("PRAGMA user_version = 2")

@@ -48,14 +48,6 @@ class SidebarWidget(QScrollArea):
         layout.addWidget(self.drives)
         self.refresh_drives()
 
-        for title, message in (("FAVORITES", "No favorite folders yet."),):
-            label = QLabel(title)
-            label.setObjectName("sectionHeading")
-            layout.addWidget(label)
-            description = QLabel(message)
-            description.setWordWrap(True)
-            layout.addWidget(description)
-            layout.addSpacing(16)
         self.content_layout = layout
         layout.addStretch()
         self.setWidget(content)

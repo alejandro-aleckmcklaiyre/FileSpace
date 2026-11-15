@@ -5,7 +5,8 @@ See [the PRD](docs/PRD.md) for the product requirements and milestones.
 
 ## Current scope
 
-Milestone 6 adds internal and external file drag-and-drop, with confirmed copy/move transfers, to **FileSpace**, initially
+Milestone 7 adds current-folder search, filters, sorting, Details/Grid views,
+favorites, and context menus to **FileSpace**, initially
 1200 × 800 logical pixels, with a navigation bar, scrollable sidebar,
 file details view, and preview panel. Drag the dividers to resize panels.
 Select a sidebar folder or drive to browse it. The Preview button hides
@@ -19,13 +20,58 @@ redirected folders. Hidden/system entries follow Qt's default visibility.
 
 The listing displays name, type, size, and modification date. It reads directory
 metadata. Selecting a file reads its preview without modifying it. The browsing
-model remains read-only; confirmed Quick Sort clicks and accepted file drops
-use a separate transfer service. Search, general file commands, and undo remain future work.
+model remains read-only; confirmed Quick Sort, Paste, and file drops use a
+separate transfer service. Rename and Recycle Bin deletion use validated worker
+actions with confirmations and history. Folder mutations and undo remain future work.
 Invalid or inaccessible destinations show a warning and preserve the last valid
 location and history. If a drive disconnects after loading, Refresh or navigating
 back to it checks access again; continuous drive-disconnection notifications are
 not implemented. Directory validation uses a worker and Qt loads listings
 asynchronously. OS/network requests can still take time to finish.
+
+## Search, views, favorites, and context menus
+
+- Type in Search to match filenames (case-insensitive substring) in the current
+  directory only. Subdirectories are not scanned. Search is debounced by 150 ms.
+- Choose a category and/or enter extensions such as `.jpg, .png` or `*.txt`.
+  Filters combine. Folders remain available under file-type filters, while the
+  filename query also applies to folder names. Clear the fields to show all items.
+  The listing shows the count of matching items.
+- Sort using the toolbar or details column headings. Size and date sorting use
+  numeric metadata, not formatted strings. Descending toggles the order.
+- Switch Details/Grid using the toolbar. Grid shows filesystem icons, not generated
+  image thumbnails. The views share filtering/sorting and preserve selected files,
+  previews, keyboard commands, and drag/drop behavior. Hidden filtered files are
+  excluded from transfer snapshots. View mode is remembered in `filespace.ini`
+  beside the database through QSettings; other filters/sort settings reset on restart.
+- Under Favorites, **Add current** saves the current folder under a chosen name.
+  Click a favorite to navigate; Remove deletes only its database entry. You can
+  also add a folder from its context menu. Shortcuts and favorites are separate.
+- Right-click files for Preview, Open, Open containing folder, Properties,
+  Copy/Cut/Paste, Rename, Delete to Recycle Bin, and Quick Sort destinations.
+  Folder menus support navigation, properties, favorites, and Paste into that
+  folder; copying/moving/renaming/deleting folders is not implemented.
+- **Open** explicitly asks Windows to open a file in its associated application.
+  Double-clicking files still only changes selection/preview; folders open inside
+  FileSpace. Properties show basic metadata; folder contents/sizes are not scanned.
+
+Copy and Cut record clipboard intent without changing files. Paste uses the
+verified transfer confirmation, conflicts, progress, cancellation, and history.
+Ctrl+C/Ctrl+X/Ctrl+V work while a file view has focus. External clipboard files
+default to Copy and require an explicit choice to Move. A cut payload is cleared
+after all its originals have been successfully moved. Partial failures require
+review and reselecting any remaining files. External paste from FileSpace does
+not publish a shell Move effect; it cannot trigger source deletion on our behalf.
+
+Rename (also F2) asks for the new stem, preserves the existing extension, refuses
+reserved/invalid/existing names, then asks for confirmation. Case-only renames
+are not supported yet. Delete (also the Delete key) confirms the full file list,
+then calls Qt's Recycle Bin API. There is no permanent-delete fallback. Unavailable
+or failed recycling is reported. Restore recycled files through Windows; FileSpace
+does not implement undo. Both actions recheck snapshots and protected paths, wait
+for previews to release files, run in a worker, and journal per-file outcomes.
+Cancel stops between files. Actual Windows Recycle Bin availability depends on
+the volume and OS settings, so verify recovery manually using disposable files.
 
 ## Drag-and-drop
 
@@ -86,10 +132,11 @@ are ignored. No global keyboard hooks or system-wide bindings are installed.
 
 Shortcuts and operation history live in `filespace.sqlite3` under Qt's
 `AppLocalDataLocation` (normally `%LOCALAPPDATA%\FileSpace`), outside the repository.
-No user-file content is stored in SQLite. Schema version 1 uses separate batch
+No user-file content is stored in SQLite. Schema version 2 uses separate batch
 and per-file tables. Connections are short-lived and local to their calling thread.
-History distinguishes `copy` and `move`, including records created before
-Milestone 6; no schema migration is required for the new operation type.
+Version 1 databases are upgraded transactionally by adding the favorites table;
+existing shortcut and history records are preserved. Older app versions reject
+the newer schema. History distinguishes copy, move, rename, and recycle actions.
 A database error prevents starting new transfers; a journaling failure during a
 batch stops subsequent files and asks you to inspect the source/destination.
 
@@ -291,6 +338,11 @@ FileSpace.
 - `app/services/file_preview_service.py`: worker dispatch and stale-result handling.
 - `app/previews/`: bounded text, Office, image, and PDF handlers.
 - `app/services/file_browser_service.py`: worker validation and navigation history.
+- `app/services/search_service.py`: current-folder filename/category/extension matching.
+- `app/ui/file_filter_model.py`: read-only proxy filtering, metadata sorting, and index mapping.
+- `app/ui/file_actions.py`: context menus, clipboard intent, and confirmed action routing.
+- `app/services/file_action_service.py`: validated and journaled rename/recycle actions.
+- `app/ui/favorites_panel.py`: persistent folder favorites.
 - `app/services/drive_service.py`: Qt standard folders and mounted volumes.
 - `app/filesystem/path_validator.py`: read-only path/access validation.
 - `app/filesystem/safety.py`: protected-path, reparse-point, and unsupported-data checks.
@@ -307,6 +359,10 @@ FileSpace.
 - `tests/test_database.py`, `tests/test_file_operations.py`, `tests/test_quick_sort.py`:
   disposable-database, data-integrity, and full UI workflow checks.
 - `tests/test_drag_drop.py`: Qt drag/drop events and copy/move import workflows.
+- `tests/test_search_and_views.py`, `tests/test_file_actions.py`: filters, grid selection,
+  clipboard, favorites/migration, rename/recycle safety, and menu workflows. Recycling
+  uses a mocked backend moving fixtures into a temporary test trash location; external
+  Open uses a mock. Native Windows association/Recycle Bin integration requires manual checks.
 - `docs/PRD.md`: product requirements.
 - `requirements.txt`: pinned environment dependencies, including Qt support packages.
 - Office extraction uses `python-docx`, `openpyxl`, and `python-pptx`; their
@@ -323,3 +379,5 @@ and [Qt application data locations](https://doc.qt.io/qtforpython-6/PySide6/QtCo
 Windows stream references: [file streams](https://learn.microsoft.com/en-us/windows/win32/fileio/file-streams)
 and [FindFirstStreamW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-findfirststreamw).
 Drag/drop reference: [Qt drag-and-drop actions and source handling](https://doc.qt.io/qtforpython-6/overviews/qtgui-dnd.html).
+Milestone 7 references: [Qt proxy models](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QSortFilterProxyModel.html)
+and [Qt Recycle Bin support](https://doc.qt.io/qt-6/qfile.html#moveToTrash).

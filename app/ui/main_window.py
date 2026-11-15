@@ -1,6 +1,6 @@
 """Compose the read-only browsing interface."""
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer
 from pathlib import Path
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
@@ -10,6 +10,8 @@ from app.database.connection import default_database_path
 from app.database.repository import Repository
 from app.filesystem.safety import default_policy, SafetyPolicy
 from app.ui.quick_sort_panel import QuickSortPanel
+from app.ui.favorites_panel import FavoritesPanel
+from app.ui.file_actions import FileActions
 
 from app.ui.file_explorer import FileExplorerWidget
 from app.ui.navigation_bar import NavigationBar
@@ -42,8 +44,11 @@ class MainWindow(QMainWindow):
             Repository(database_path), safety_policy or default_policy(database_path),
             self.explorer.selected_paths, self.sidebar,
         )
-        self.explorer.details.drop_policy = self.quick_sort.service.policy
-        self.explorer.details.quick_sort_key_handler = self.quick_sort.activate_keyword
+        for view in (self.explorer.details, self.explorer.grid):
+            view.drop_policy = self.quick_sort.service.policy
+            view.quick_sort_key_handler = self.quick_sort.activate_keyword
+        self.favorites = FavoritesPanel(self.quick_sort.repository, lambda: self.browser.current, self.sidebar)
+        self.sidebar.content_layout.insertWidget(self.sidebar.content_layout.count() - 1, self.favorites)
         self.sidebar.content_layout.insertWidget(self.sidebar.content_layout.count() - 1, self.quick_sort)
         self._quick_sort_busy = False
         for panel in (self.sidebar, self.explorer, self.preview):
@@ -67,6 +72,25 @@ class MainWindow(QMainWindow):
         self._preview_sizes: list[int] = []
         self.navigation.preview_toggled.connect(self._set_preview_visible)
         self.browser = FileBrowserService(self)
+        self.file_actions = FileActions(self)
+        self.view_settings = QSettings(str(database_path.with_suffix(".ini")), QSettings.Format.IniFormat)
+        saved_view = str(self.view_settings.value("view/mode", "Details"))
+        self.navigation.view_mode.setCurrentText(saved_view if saved_view in {"Details", "Grid"} else "Details")
+        self.explorer.set_view_mode(self.navigation.view_mode.currentText())
+        self.filter_timer = QTimer(self)
+        self.filter_timer.setSingleShot(True)
+        self.filter_timer.setInterval(150)
+        self.filter_timer.timeout.connect(self._apply_filters)
+        self.navigation.search_field.textChanged.connect(lambda text: self.filter_timer.start())
+        self.navigation.extensions.textChanged.connect(lambda text: self.filter_timer.start())
+        self.navigation.category.currentTextChanged.connect(lambda text: self._apply_filters())
+        self.navigation.sort_column.currentIndexChanged.connect(self._sort_files)
+        self.navigation.descending.toggled.connect(self._sort_files)
+        self.navigation.view_mode.currentTextChanged.connect(self._switch_view)
+        self.explorer.details.header().sortIndicatorChanged.connect(self._header_sort_changed)
+        self.quick_sort.favorites_loaded.connect(self.favorites.set_rows)
+        self.favorites.navigate_requested.connect(self.browser.navigate)
+        self.favorites.busy_changed.connect(lambda busy: self._set_quick_sort_busy(self.quick_sort.busy))
         self.sidebar.location_selected.connect(self.browser.navigate)
         self.explorer.folder_requested.connect(self.browser.navigate)
         self.explorer.file_selected.connect(self._preview_selection)
@@ -129,11 +153,12 @@ class MainWindow(QMainWindow):
             self.splitter.setSizes(self._preview_sizes)
 
     def closeEvent(self, event) -> None:
-        if self.quick_sort.busy:
+        if self.quick_sort.busy or self.favorites.busy:
             QMessageBox.information(self, "Quick Sort is active", "Wait for Quick Sort to finish. During a transfer, Cancel stops after the current file.")
             event.ignore()
             return
         self.preview.shutdown()
+        self.view_settings.sync()
         super().closeEvent(event)
 
     def _preview_selection(self, path: str) -> None:
@@ -141,12 +166,35 @@ class MainWindow(QMainWindow):
             self.preview.select_file(path)
 
     def _set_quick_sort_busy(self, busy: bool) -> None:
-        self._quick_sort_busy = busy
+        self._quick_sort_busy = busy or self.favorites.busy
         for widget in (self.explorer, self.navigation, self.sidebar.locations, self.sidebar.drives):
-            widget.setEnabled(not busy)
-        if busy:
+            widget.setEnabled(not self._quick_sort_busy)
+        self.favorites.setEnabled(not busy and not self.favorites.busy)
+        self.quick_sort.setEnabled(not self.favorites.busy)
+        if self._quick_sort_busy:
             self.preview.select_file("")
 
     def _prepare_transfer(self, plan, decisions) -> None:
         self.statusBar().showMessage("Closing active preview before transfer…")
         self.preview.release_for_transfer(lambda: self.quick_sort.execute(plan, decisions))
+
+    def _apply_filters(self) -> None:
+        self.explorer.set_filters(self.navigation.search_field.text(), self.navigation.extensions.text(), self.navigation.category.currentText())
+
+    def _sort_files(self, *args) -> None:
+        order = Qt.SortOrder.DescendingOrder if self.navigation.descending.isChecked() else Qt.SortOrder.AscendingOrder
+        self.explorer.sort_files(self.navigation.sort_column.currentData(), order)
+
+    def _header_sort_changed(self, column, order) -> None:
+        for widget in (self.navigation.sort_column, self.navigation.descending):
+            widget.blockSignals(True)
+        self.navigation.sort_column.setCurrentIndex(self.navigation.sort_column.findData(column))
+        self.navigation.descending.setChecked(order == Qt.SortOrder.DescendingOrder)
+        for widget in (self.navigation.sort_column, self.navigation.descending):
+            widget.blockSignals(False)
+        self.explorer._sort = (column, order)
+
+    def _switch_view(self, mode: str) -> None:
+        self.explorer.set_view_mode(mode)
+        self.view_settings.setValue("view/mode", mode)
+        self.view_settings.sync()

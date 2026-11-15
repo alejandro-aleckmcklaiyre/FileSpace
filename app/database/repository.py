@@ -44,16 +44,32 @@ class Repository:
                 ids[index], ids[target] = ids[target], ids[index]
                 db.executemany("UPDATE quick_sort_shortcuts SET position=? WHERE id=?", enumerate(ids))
 
-    def start_operation(self, destination: str, sources: list[str], operation_type: str = "move") -> tuple[int, list[int]]:
-        if operation_type not in {"copy", "move"}:
+    def favorites(self) -> list[dict]:
+        with connect(self.path) as db:
+            return [dict(row) for row in db.execute("SELECT * FROM favorites ORDER BY name COLLATE NOCASE,id")]
+
+    def save_favorite(self, name: str, path: str) -> None:
+        if not name.strip() or len(name.strip()) > 100:
+            raise ValueError("Enter a favorite name between 1 and 100 characters.")
+        with connect(self.path) as db:
+            db.execute("INSERT INTO favorites(name,folder_path) VALUES(?,?) ON CONFLICT(folder_path) DO UPDATE SET name=excluded.name", (name.strip(), path))
+
+    def delete_favorite(self, favorite_id: int) -> None:
+        with connect(self.path) as db:
+            db.execute("DELETE FROM favorites WHERE id=?", (favorite_id,))
+
+    def start_operation(self, destination: str, sources: list[str], operation_type: str = "move", destinations: list[str] | None = None) -> tuple[int, list[int]]:
+        if operation_type not in {"copy", "move", "rename", "recycle"}:
             raise ValueError("Unknown transfer operation.")
+        if destinations is not None and len(destinations) != len(sources):
+            raise ValueError("Every file needs a journal destination.")
         with connect(self.path) as db:
             operation = db.execute("INSERT INTO operation_history(destination_path,operation_type,status) VALUES(?,?,'running')", (destination, operation_type)).lastrowid
             items = []
-            for source in sources:
+            for index, source in enumerate(sources):
                 items.append(db.execute(
                     "INSERT INTO operation_items(operation_id,source_path,destination_path,status) VALUES(?,?,?,'pending')",
-                    (operation, source, str(Path(destination) / Path(source).name)),
+                    (operation, source, destinations[index] if destinations is not None else str(Path(destination) / Path(source).name)),
                 ).lastrowid)
             return operation, items
 

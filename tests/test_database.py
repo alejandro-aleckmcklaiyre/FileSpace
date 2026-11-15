@@ -90,11 +90,11 @@ class DatabaseTests(unittest.TestCase):
 
     def test_newer_database_is_not_modified(self) -> None:
         with connect(self.repo.path) as db:
-            db.execute("PRAGMA user_version = 2")
+            db.execute("PRAGMA user_version = 3")
         with self.assertRaises(ValueError):
             self.repo.initialize()
         with connect(self.repo.path) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
 
     def test_final_journal_failure_reports_that_files_already_moved(self) -> None:
         source = self.root / "done.txt"

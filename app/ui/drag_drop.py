@@ -11,7 +11,7 @@ from typing import Callable
 
 from PySide6.QtCore import QMimeData, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QDrag, QPainter, QPen
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QListWidget, QToolTip, QTreeView
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QListView, QListWidget, QToolTip, QTreeView
 
 from app.filesystem.safety import SafetyPolicy
 
@@ -46,7 +46,7 @@ class DropRequest:
 def event_files(event) -> tuple[tuple[str, ...], bool]:
     """Trust the actual Qt drag source, never a marker supplied by another app."""
     mime = event.mimeData()
-    internal = isinstance(event.source(), FileDragView)
+    internal = isinstance(event.source(), _FileView)
     try:
         if internal:
             if not mime.hasFormat(INTERNAL_MIME):
@@ -162,12 +162,11 @@ class _DropTarget:
         painter.drawText(label.adjusted(4, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap, self._drag_label)
 
 
-class FileDragView(_DropTarget, QTreeView):
-    files_dropped = Signal(object)
-
+class _FileView(_DropTarget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.quick_sort_key_handler: Callable[[str, bool], bool] | None = None
+        self.file_action_handler = None
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         self.setDragEnabled(True)
         self._configure_drop()
@@ -178,6 +177,17 @@ class FileDragView(_DropTarget, QTreeView):
         Scope is this focused view only. Modified commands, text fields, dialogs,
         and unassigned letters retain their existing Qt behavior.
         """
+        if self.hasFocus() and QApplication.activeModalWidget() is None and self.file_action_handler:
+            action = None
+            if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                action = {Qt.Key.Key_C: "copy", Qt.Key.Key_X: "cut", Qt.Key.Key_V: "paste"}.get(event.key())
+            elif event.modifiers() == Qt.KeyboardModifier.NoModifier:
+                action = {Qt.Key.Key_F2: "rename", Qt.Key.Key_Delete: "recycle"}.get(event.key())
+            if action:
+                if not event.isAutoRepeat():
+                    self.file_action_handler(action)
+                event.accept()
+                return
         if (
             self.hasFocus() and QApplication.activeModalWidget() is None
             and event.modifiers() in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ShiftModifier)
@@ -220,6 +230,14 @@ class FileDragView(_DropTarget, QTreeView):
             return (model.filePath(index) if model.isDir(index) else ""), rectangle
         root = self.rootIndex()
         return (model.filePath(root) if root.isValid() else ""), rectangle
+
+
+class FileDragView(_FileView, QTreeView):
+    files_dropped = Signal(object)
+
+
+class FileIconView(_FileView, QListView):
+    files_dropped = Signal(object)
 
 
 class ShortcutDropList(_DropTarget, QListWidget):

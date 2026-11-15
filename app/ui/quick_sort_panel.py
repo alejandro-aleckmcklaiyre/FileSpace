@@ -21,6 +21,8 @@ class QuickSortPanel(QWidget):
     busy_changed = Signal(bool)
     transfer_requested = Signal(object, object)
     files_changed = Signal()
+    favorites_loaded = Signal(object)
+    transfer_completed = Signal(object)
 
     def __init__(self, repository: Repository, policy: SafetyPolicy, selected_paths: Callable, parent=None) -> None:
         super().__init__(parent)
@@ -33,6 +35,8 @@ class QuickSortPanel(QWidget):
         self.busy = False
         self.initialized = False
         self.progress_dialog: QProgressDialog | None = None
+        self._action_callback = None
+        self._action_mutates = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         heading = QLabel("QUICK SORT")
@@ -82,7 +86,7 @@ class QuickSortPanel(QWidget):
     def _initialize(self) -> None:
         def initialize(progress):
             self.repository.initialize()
-            return self.repository.shortcuts()
+            return {"shortcuts": self.repository.shortcuts(), "favorites": self.repository.favorites()}
         self._start("initialize", initialize, "Loading destinations…")
 
     def _selected(self) -> dict | None:
@@ -231,20 +235,42 @@ class QuickSortPanel(QWidget):
     def execute(self, plan, decisions) -> None:
         self._start("transfer", lambda progress: self.service.transfer(plan, decisions, self.runner.cancel, progress), f"Preparing {plan.operation}…", True)
 
+    def run_action(self, function, label: str, callback, cancellable=False, mutating=False) -> None:
+        """Share the serialized worker/progress lifecycle with context-menu actions."""
+        if self.busy or self.runner.busy:
+            return
+        self._action_callback = callback
+        self._action_mutates = mutating
+        self._start("action", function, label, cancellable)
+
     def _finished(self, name: str, result, error: str) -> None:
         self._close_progress()
         if error:
+            self._action_callback = None
             self._set_busy(False)
             QMessageBox.warning(self, "Quick Sort could not complete", error)
-            if name == "transfer":
+            if name == "transfer" or (name == "action" and self._action_mutates):
                 self.files_changed.emit()
+            self._action_mutates = False
             return
-        if name == "plan":
+        if name == "action":
+            self._action_mutates = False
+            callback, self._action_callback = self._action_callback, None
+            self._set_busy(False)
+            if callback:
+                callback(result)
+            return
+        if name == "initialize":
+            self.initialized = True
+            self._reload_rows(result["shortcuts"])
+            self.favorites_loaded.emit(result["favorites"])
+        elif name == "plan":
             confirmation = TransferConfirmationDialog(result, self)
             if confirmation.exec() == QDialog.DialogCode.Accepted:
                 self.transfer_requested.emit(result, confirmation.decisions())
                 return
         elif name == "transfer":
+            self.transfer_completed.emit(result)
             self.files_changed.emit()
             self._report("Transfer results", "\n\n".join(
                 f"{item.status}: {item.source}\n→ {item.destination}\n{item.message}" for item in result
