@@ -5,8 +5,10 @@ See [the PRD](docs/PRD.md) for the product requirements and milestones.
 
 ## Current scope
 
-Milestone 7 adds current-folder search, filters, sorting, Details/Grid views,
-favorites, and context menus to **FileSpace**, initially
+Milestone 8 adds a Windows preview package, application icon, local diagnostics,
+reproducible build tools and acceptance documentation. Existing search, filters,
+sorting, Details/Grid, favorites, context menus, previews and safe transfers remain.
+**FileSpace** starts at
 1200 × 800 logical pixels, with a navigation bar, scrollable sidebar,
 file details view, and preview panel. Drag the dividers to resize panels.
 Select a sidebar folder or drive to browse it. The Preview button hides
@@ -28,6 +30,27 @@ location and history. If a drive disconnects after loading, Refresh or navigatin
 back to it checks access again; continuous drive-disconnection notifications are
 not implemented. Directory validation uses a worker and Qt loads listings
 asynchronously. OS/network requests can still take time to finish.
+
+## Windows preview build
+
+From this project directory, launch the packaged app without activating Python:
+
+```powershell
+.\dist\FileSpace\FileSpace.exe
+```
+
+Keep the complete `dist\FileSpace` folder together, including `_internal`.
+The review ZIP is `dist\FileSpace-1.0.0-preview-windows-x64.zip`; extract it
+before launching. The build is `1.0.0-preview`, not an installer or a published
+release. Native Windows/clean-machine acceptance remains a release gate.
+
+Read [the user guide](docs/USER_GUIDE.md), [Windows build instructions](docs/WINDOWS_BUILD.md),
+[test report](docs/MILESTONE_8_REPORT.md), [manual checklist](docs/ACCEPTANCE_TESTS.md),
+and [known limitations](docs/KNOWN_LIMITATIONS.md).
+
+Unexpected errors are logged locally under the application data directory's
+`logs\filespace.log`; logs rotate and can include file paths and exception messages.
+The executable folder and bundled libraries are protected from mutating operations.
 
 ## Search, views, favorites, and context menus
 
@@ -231,6 +254,12 @@ In VS Code, use **Python: Select Interpreter** and select
 `.venv\Scripts\python.exe`. Activation is optional; the commands here call
 the environment's interpreter directly, avoiding activation-policy issues.
 
+For packaging/testing tools specified by the PRD, install the development list:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
 ## Run
 
 Start the application; close its window to return to the terminal:
@@ -268,6 +297,18 @@ no additional test package required):
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+The same unittest cases also run through pytest; Ruff checks imports and selected
+bug-prevention rules. Use these Milestone 8 development checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check app tests tools
+```
+
+Packaged self-tests are explicit `--smoke-test NEW_REPORT.json` runs against
+generated temporary fixtures. They do not operate on existing user files. See
+the build instructions for the clean-environment and relocated-archive verifiers.
 
 These checks cover history, invalid/permission-denied paths, relative paths,
 root navigation, stale navigation results, listing refresh, and read-only UI

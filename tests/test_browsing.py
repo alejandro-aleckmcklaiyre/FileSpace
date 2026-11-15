@@ -7,12 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import QThreadPool
-from PySide6.QtWidgets import QApplication, QAbstractItemView
+from PySide6.QtWidgets import QAbstractItemView, QApplication
 
 from app.filesystem.path_validator import validate_directory
 from app.services.file_browser_service import FileBrowserService
 from app.ui.main_window import MainWindow
-
 
 APPLICATION = QApplication.instance() or QApplication([])
 

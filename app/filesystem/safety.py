@@ -41,6 +41,8 @@ class SafetyPolicy:
 
 def default_policy(database_path: Path) -> SafetyPolicy:
     roots = [database_path.parent, Path(__file__).resolve().parents[2], Path(sys.prefix), Path(sys.base_prefix)]
+    if getattr(sys, "frozen", False):
+        roots.append(Path(sys.executable).resolve().parent)
     for key in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData", "LOCALAPPDATA", "APPDATA"):
         if os.environ.get(key):
             roots.append(Path(os.environ[key]))

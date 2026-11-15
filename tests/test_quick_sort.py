@@ -8,9 +8,9 @@ from pathlib import Path
 from threading import Event
 from unittest.mock import patch
 
-from PySide6.QtCore import QEvent, QItemSelectionModel, QThreadPool, Qt
-from PySide6.QtTest import QTest
+from PySide6.QtCore import QEvent, QItemSelectionModel, Qt, QThreadPool
 from PySide6.QtGui import QImage, QKeyEvent
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from app.database.repository import Repository
@@ -309,12 +309,12 @@ class QuickSortTests(unittest.TestCase):
                 self.window.sidebar.ensureWidgetVisible(shortcuts)
                 APPLICATION.processEvents()
                 QTest.mouseClick(shortcuts.viewport(), Qt.MouseButton.LeftButton, pos=shortcuts.visualItemRect(shortcuts.item(0)).center())
-                wait_until(lambda: len(reports) > batch or bool(warnings))
+                wait_until(lambda batch=batch: len(reports) > batch or bool(warnings))
                 self.assertEqual(warnings, [])
                 plan = dialog.call_args.args[0]
                 self.assertEqual({item.source for item in plan.items}, set(paths))
                 wait_until(lambda: not self.window.quick_sort.busy and not self.window.browser._workers)
-                wait_until(lambda: self.window.explorer.model.rowCount(view.rootIndex()) == 8 - batch * 2)
+                wait_until(lambda view=view, batch=batch: self.window.explorer.model.rowCount(view.rootIndex()) == 8 - batch * 2)
                 self.assertTrue(all((self.destination / path.name).exists() for path in paths))
         self.assertEqual(len(self.repo.history()), 8)
 

@@ -1,18 +1,27 @@
 """Shortcut management and explicit, confirmed move workflow."""
 
-from typing import Callable
+from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QListWidgetItem,
-    QMessageBox, QPlainTextEdit, QProgressDialog, QPushButton, QVBoxLayout, QWidget,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidgetItem,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressDialog,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from app.database.repository import Repository
 from app.filesystem.safety import SafetyPolicy
 from app.services.file_operation_service import FileOperationService
 from app.services.quick_sort_service import QuickSortService
-from app.ui.dialogs.quick_sort import ExternalTransferDialog, TransferConfirmationDialog, ShortcutDialog
+from app.ui.dialogs.quick_sort import ExternalTransferDialog, ShortcutDialog, TransferConfirmationDialog
 from app.ui.drag_drop import DropRequest, ShortcutDropList
 
 

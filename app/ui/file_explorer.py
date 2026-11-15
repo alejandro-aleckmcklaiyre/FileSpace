@@ -3,9 +3,9 @@
 from PySide6.QtCore import QDir, QItemSelectionModel, QModelIndex, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFileSystemModel,
     QHeaderView,
     QLabel,
-    QFileSystemModel,
     QListView,
     QStackedWidget,
     QVBoxLayout,

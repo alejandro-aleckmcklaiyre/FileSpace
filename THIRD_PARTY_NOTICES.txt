@@ -1,0 +1,22 @@
+FileSpace uses Python, Qt for Python (PySide6/shiboken6), Qt including its PDF and
+multimedia backends, python-docx, openpyxl, python-pptx, lxml, Pillow, XlsxWriter,
+et-xmlfile, and typing_extensions. The Windows executable is built by PyInstaller.
+
+The package includes upstream wheel license files when provided under
+_internal/licenses/ and package metadata under _internal/*.dist-info/. Consult
+those upstream notices for the applicable component terms and copyright owners.
+The bundled Python license is provided by PyInstaller under _internal/.
+
+Upstream projects:
+https://www.python.org/
+https://www.qt.io/qt-for-python
+https://github.com/python-openxml/python-docx
+https://openpyxl.readthedocs.io/
+https://github.com/scanny/python-pptx
+https://lxml.de/
+https://python-pillow.org/
+https://xlsxwriter.readthedocs.io/
+https://pyinstaller.org/
+
+The FileSpace folder/arrow icon was created for this project. The bundled smoke
+video is a generated blue test frame sequence; it contains no third-party media.

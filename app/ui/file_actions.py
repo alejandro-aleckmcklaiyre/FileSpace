@@ -5,8 +5,18 @@ from uuid import uuid4
 
 from PySide6.QtCore import QItemSelectionModel, QMimeData, QObject, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QInputDialog, QMenu, QMessageBox, QPlainTextEdit, QVBoxLayout
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QInputDialog,
+    QMenu,
+    QMessageBox,
+    QPlainTextEdit,
+    QVBoxLayout,
+)
 
+from app.runtime import external_library_search
 from app.services.file_action_service import FileActionService
 from app.ui.drag_drop import DropRequest
 
@@ -99,7 +109,9 @@ class FileActions(QObject):
             else:
                 destination = str(Path(path).parent) if action == "containing" else path
                 def launch(text):
-                    if not QDesktopServices.openUrl(QUrl.fromLocalFile(destination)):
+                    with external_library_search():
+                        opened = QDesktopServices.openUrl(QUrl.fromLocalFile(destination))
+                    if not opened:
                         QMessageBox.warning(self.window, "Cannot open location", "Windows could not open this file or folder.")
                 self.panel.run_action(lambda progress: self.service.properties([destination]), "Checking location…", launch)
         elif action in {"copy", "cut"}:

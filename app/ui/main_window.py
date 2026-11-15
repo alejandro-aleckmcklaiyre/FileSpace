@@ -1,28 +1,28 @@
 """Compose the read-only browsing interface."""
 
-from PySide6.QtCore import QSettings, Qt, QTimer
 from pathlib import Path
+
+from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QSplitter, QVBoxLayout, QWidget
 
-from app.services.file_browser_service import FileBrowserService
-from app.services.drive_service import standard_locations
 from app.database.connection import default_database_path
 from app.database.repository import Repository
-from app.filesystem.safety import default_policy, SafetyPolicy
-from app.ui.quick_sort_panel import QuickSortPanel
+from app.filesystem.safety import SafetyPolicy, default_policy
+from app.services.drive_service import standard_locations
+from app.services.file_browser_service import FileBrowserService
 from app.ui.favorites_panel import FavoritesPanel
 from app.ui.file_actions import FileActions
-
 from app.ui.file_explorer import FileExplorerWidget
 from app.ui.navigation_bar import NavigationBar
 from app.ui.preview_panel import PreviewPanel
+from app.ui.quick_sort_panel import QuickSortPanel
 from app.ui.sidebar import SidebarWidget
 
 
 class MainWindow(QMainWindow):
     """Connect presentation widgets to read-only navigation services."""
 
-    def __init__(self, database_path: Path | None = None, safety_policy: SafetyPolicy | None = None) -> None:
+    def __init__(self, database_path: Path | None = None, safety_policy: SafetyPolicy | None = None, initial_location: Path | None = None) -> None:
         super().__init__()
         self.setWindowTitle("FileSpace")
         self.resize(1200, 800)
@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
         self.navigation.address_field.returnPressed.connect(
             lambda: self.browser.navigate(self.navigation.address_field.text())
         )
-        self.browser.navigate(standard_locations()[0][1])
+        self.browser.navigate(str(initial_location) if initial_location is not None else standard_locations()[0][1])
         QTimer.singleShot(0, self.sidebar.fit_lists)
 
     def _select_location(self, location: str) -> None:

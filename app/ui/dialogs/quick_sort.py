@@ -2,9 +2,21 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QRadioButton,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QRadioButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
 )
 
 from app.filesystem.file_operations import TransferPlan

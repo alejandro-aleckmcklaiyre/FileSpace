@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QItemSelectionModel, QMimeData, QPointF, QThreadPool, Qt, QUrl
+from PySide6.QtCore import QItemSelectionModel, QMimeData, QPointF, Qt, QThreadPool, QUrl
 from PySide6.QtGui import QDropEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog

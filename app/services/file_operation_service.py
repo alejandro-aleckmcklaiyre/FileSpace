@@ -1,7 +1,8 @@
 """Single-job worker runner with cooperative transfer cancellation."""
 
+import logging
+from collections.abc import Callable
 from threading import Event
-from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
@@ -22,6 +23,7 @@ class _Job(QRunnable):
         try:
             result = self.function(self.signals.progress.emit)
         except Exception as error:
+            logging.getLogger(__name__).exception("File operation task failed: %s", self.name)
             self.signals.done.emit(self.name, None, str(error))
         else:
             self.signals.done.emit(self.name, result, "")

@@ -1,5 +1,6 @@
 """Validated, journaled rename and Recycle Bin actions for regular files."""
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -126,5 +127,5 @@ class FileActionService:
             try:
                 self.repository.finish_operation(operation, "needs_review")
             except Exception:
-                pass
+                logging.getLogger(__name__).exception("Could not mark failed file action in history")
             raise OSError(f"File action may have completed. Inspect per-file history before retrying. {error}") from error

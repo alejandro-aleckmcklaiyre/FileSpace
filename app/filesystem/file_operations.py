@@ -9,14 +9,14 @@ import os
 import shutil
 import stat
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
-from typing import Callable
 from uuid import uuid4
 
-from app.filesystem.safety import SafetyPolicy, check_file_data
 from app.filesystem.path_validator import validate_directory
+from app.filesystem.safety import SafetyPolicy, check_file_data
 from app.filesystem.streams import named_streams, stream_path
 
 CHUNK_SIZE = 1024 * 1024
@@ -270,7 +270,7 @@ def execute_plan(plan: TransferPlan, decisions: list[str], policy: SafetyPolicy,
     if len(decisions) != len(plan.items):
         raise ValueError("Every selected file needs a decision.")
     results = []
-    for index, (item, action) in enumerate(zip(plan.items, decisions)):
+    for index, (item, action) in enumerate(zip(plan.items, decisions, strict=True)):
         if cancel.is_set():
             result = TransferResult(str(item.source), str(item.target), "cancelled", "Cancelled before starting this file.")
         else:

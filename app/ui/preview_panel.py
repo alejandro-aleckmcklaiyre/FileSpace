@@ -5,8 +5,17 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton,
-    QSlider, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QSlider,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from app.services.file_preview_service import FilePreviewService, PreviewResult

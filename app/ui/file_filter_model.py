@@ -1,6 +1,6 @@
 """Proxy filtering/sorting with explicit filesystem-index mapping."""
 
-from PySide6.QtCore import QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtCore import QModelIndex, QSortFilterProxyModel
 
 from app.services.search_service import matches
 

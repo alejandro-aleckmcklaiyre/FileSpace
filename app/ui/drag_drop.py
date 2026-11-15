@@ -5,13 +5,13 @@ FileSpace cannot let another application perform an unconfirmed move.
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from PySide6.QtCore import QMimeData, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QDrag, QPainter, QPen
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QListView, QListWidget, QToolTip, QTreeView
+from PySide6.QtWidgets import QAbstractItemView, QApplication, QListView, QListWidget, QToolTip, QTreeView
 
 from app.filesystem.safety import SafetyPolicy
 

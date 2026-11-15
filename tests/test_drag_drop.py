@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QItemSelectionModel, QMimeData, QPoint, QPointF, QThreadPool, Qt, QUrl
+from PySide6.QtCore import QItemSelectionModel, QMimeData, QPoint, QPointF, Qt, QThreadPool, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QApplication, QDialog, QListWidgetItem
 
@@ -112,7 +112,7 @@ class DragEventTests(unittest.TestCase):
             event = InternalDropEvent(self.destination_point(), mime, self.view, modifiers)
             self.view.dropEvent(event)
             self.assertTrue(event.isAccepted())
-            wait_until(lambda: len(self.received) == (1 if operation == "move" else 2))
+            wait_until(lambda operation=operation: len(self.received) == (1 if operation == "move" else 2))
             self.assertFalse(self.received[-1].external)
             self.assertEqual(self.received[-1].operation, operation)
         # A forged private marker with no actual FileSpace source is not trusted.
@@ -320,7 +320,7 @@ class DropWorkflowTests(unittest.TestCase):
             for path in (self.source, self.source / "missing.txt"):
                 previous = len(warnings)
                 self.window.quick_sort.request_drop(DropRequest((str(path),), str(self.destination), "copy", True))
-                wait_until(lambda: len(warnings) > previous and not self.window.quick_sort.busy)
+                wait_until(lambda previous=previous: len(warnings) > previous and not self.window.quick_sort.busy)
         self.assertTrue(all(file.exists() for file in self.files))
         self.assertFalse(list(self.destination.iterdir()))
         self.assertEqual(self.repo.history(), [])

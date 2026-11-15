@@ -1,8 +1,8 @@
 """Preview regression checks using disposable, generated documents."""
 
-import tempfile
 import shutil
 import subprocess
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -10,7 +10,7 @@ from threading import Event
 from unittest.mock import patch
 
 from PySide6.QtCore import QThreadPool, QUrl
-from PySide6.QtGui import QImage, QPainter, QPdfWriter
+from PySide6.QtGui import QPainter, QPdfWriter
 from PySide6.QtWidgets import QApplication
 
 from app.services.file_preview_service import FilePreviewService, PreviewResult, load_preview
